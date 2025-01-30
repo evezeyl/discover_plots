@@ -1,0 +1,40 @@
+---
+title: "parallel_plots"
+author: "Eve Zeyl Fiskebeck"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+params:
+    data: 
+    source_code: 'code/R'
+execute: 
+  echo: false
+  cache: false
+format: html
+knitr:
+  opts_chunk: 
+    collapse: true
+    comment: "#>" 
+    R.options:
+      knitr.graphics.auto_pdf: true
+editor_options: 
+  chunk_output_type: console
+---
+
+
+```{r setup}
+#| include: false
+library(here)
+#source(here::here(params$source_code, "AI_main.R"))
+```
+
+
+```{r setup}
+# Provisional until we get a package
+fun_files_path <- list.files(here::here(params$source_code, "fun"),
+  pattern = "*.R",
+  full.names = T)
+# correcting order sourcing
+fun_files_path <- c(fun_files_path[1:13],fun_files_path[15], fun_files_path[14], fun_files_path[16:32] )
+# sourcing all functions
+sapply(fun_files_path,source,.GlobalEnv)
+```
+
