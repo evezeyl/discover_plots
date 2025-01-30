@@ -3,7 +3,7 @@ title: "parallel_plots"
 author: "Eve Zeyl Fiskebeck"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 params:
-    data: 
+    data: "data/STEC_isolate_inventory_WGS_Updated_20240205.xlsx"
     source_code: 'code/R'
 execute: 
   echo: false
@@ -19,22 +19,212 @@ editor_options:
   chunk_output_type: console
 ---
 
+- added Renv
 
 ```{r setup}
 #| include: false
 library(here)
-#source(here::here(params$source_code, "AI_main.R"))
+library(readxl)
+library(dplyr)
+library(stringr)
+library(ggplot2)
+library(ggalluvial)
+library(ggfittext)
+library(tidyr)
+library(purrr)
+library(svglite)
+```
+
+# Data check and cleaning 
+
+NOTE: The data is not clean - This is not normal (you should provide the data set with a table that can be used directly in an analysis software - so the formating should be rechecked)
+
+```{r}
+data <- readxl::read_excel(here::here(params$data),
+                           col_types = "text")
+glimpse(data) 
+```
+
+data selection - to ease making graphs (and only cleaning what I must)
+
+- based on lab data 
+```{r}
+# lab then sequence fields - that is why organized like that
+# last those I do not think I will use but keep anyway for now
+selected_data <- 
+  data %>% 
+  select(Country, Source.Group, 
+         stx, eae.x, MLST, O.group, H.type, 
+         Serotype.O, Serotype.H,  
+         AMR.genes,
+         Source.Subgroup, Year.Isolation, Institute, Isolate.ID
+         ) 
+glimpse(selected_data)
+```
+
+data quality -> in case need modifications fields
+
+```{r}
+# function for fast reuse of summary
+my_summary_fun <- function(data) {
+  data %>%
+    select(-Isolate.ID, -AMR.genes) %>%
+    mutate_all(factor) %>%
+    summary(., maxsum = 200) %>%
+    as.data.frame.matrix(row.names = NULL) %>% 
+    mutate_all(~coalesce(., "")) %>%
+    `rownames<-`( NULL ) 
+}
+```
+
+Verification 
+
+```{r}
+selected_data %>% 
+  my_summary_fun()  %>%
+  View()
+
+selected_data %>%
+  select(MLST) %>%
+  distinct() %>%
+  View()
 ```
 
 
-```{r setup}
-# Provisional until we get a package
-fun_files_path <- list.files(here::here(params$source_code, "fun"),
-  pattern = "*.R",
-  full.names = T)
-# correcting order sourcing
-fun_files_path <- c(fun_files_path[1:13],fun_files_path[15], fun_files_path[14], fun_files_path[16:32] )
-# sourcing all functions
-sapply(fun_files_path,source,.GlobalEnv)
+
+THIS IS TO BE CHECKED : **Homoegeneizing NAs** 
+_Ask for treatment_
+
+- [ ] O group : 101/162 53/178 ... how to treat those ? X25  ? is it real ?
+- [ ] ST13864* ST21* ST301*       New ST (adk_... what is)  some with the same number have * and others not eg ] MLST eg ST10075 and ST10075*
+- [ ] Serotype O: O? , eg O128ab, O128ac -> should be merged or ?
+- [ ] Serotype H: H? -> unknwon
+
+Need to homogeneize what is uncertain 
+```{r}
+# The NA is already NA so we do not need to add (would mess up system)
+NAs <- c("^unknown$", "^Unknown$", 
+         "ST-", "^unknown ST", 
+         "O[?]", "H[?]" )
+
+new_ST <- c("New ST", "new ST")
+
+
+# Function to detect pattern in a cell and replace it by something else (eg. NA)
+replace_with_XX <- function(astring, patterns, XX) {
+  
+  ## XX is what should the thing replaced with 
+  
+  # Test if there is a match with the cell to any replacement pattern
+  replace_decision <- 
+    any(unlist(
+      lapply(patterns, function(x) grepl(x, astring))
+      ))
+  # True then replace with NA 
+  ifelse(replace_decision, XX, astring)
+}
+
+# I finished to use Unknown as its more practical for the graph
+homegeneized_data <- 
+  selected_data %>%
+  mutate(across(everything(), 
+                ~ purrr::map_vec(., replace_with_XX, NAs, "Unknown")
+         )) %>%
+  # Now I need to replace NA also 
+  mutate(across(everything(), 
+                ~ purrr::map_vec(., function(x) ifelse(is.na(x), "Unknown",x))
+         )) %>% 
+  mutate(across(everything(), 
+                ~ purrr::map_vec(., replace_with_XX, new_ST, "New")
+         ))
+  
+```
+
+
+Control 
+```{r}
+homegeneized_data  %>% 
+  my_summary_fun()  %>%
+  View()
+
+homegeneized_data  %>% 
+  select(MLST) %>%
+  distinct() %>%
+  View()
+```
+
+!new ST are also now considered as a category New (no distinctions) (fix that if you do not want it)
+
+
+
+# Manipulation data for making graphs
+
+Parallel sets (Sankey like) plots (I want adding to 100 %)
+
+```{r}
+homegeneized_data %>%
+  glimpse()
+
+# To be able to resize and adjust it appears that long format will be easier
+long_data <- 
+  homegeneized_data %>%
+  select(-Isolate.ID) %>%
+  mutate(Source = 
+           ifelse(Source.Group == "Human", Source.Group, "Non\nhuman")
+         ) %>%
+  mutate_at(vars(stx), ~str_replace(., ";", "\n")) %>%
+  mutate(nbrow = 1) %>%
+  mutate(`%` = nbrow / sum(nbrow) * 100) %>%
+  select(-Source.Group, -Institute, -Source.Subgroup, -nbrow) %>%
+  # trying to order to make the graph a bit clearer
+  arrange(Source, eae.x, stx, O.group, H.type, MLST) %>% 
+  mutate(Origin  = Source) %>%
+  # so all the columns we want to show in alluvial need to be in long format
+  # But not the fill 
+  to_lodes_form(key = "col",
+                axes = c("Origin", "eae.x", "stx", "O.group","H.type", "MLST"),
+                value = "stratum",
+                id = "alluvium") 
+head(long_data)
+View(long_data)
+```
+
+
+```{r}
+# to be able to resize the text we need to go to long format
+global_parallel_plot <- 
+  long_data %>%
+  mutate(text_size = case_when(
+    col == "Origin" | col == "eae.x" | col == "stx" ~ 1,
+    col == "O.group" | col == "H.type" ~ 1,
+    TRUE ~ .3)
+    ) %>% 
+  ggplot(., 
+       aes(x = col, y = `%`,
+           stratum = stratum, 
+           alluvium = alluvium,
+           label = stratum)) + 
+  geom_alluvium(aes(fill = Source)) +
+  #geom_stratum(width = 1/2) +
+  geom_stratum() + 
+  geom_fit_text(stat = "stratum", min.size = 1) +
+  ggtitle("Percentage of isolates belonging to the classicaly typing systems") + 
+  theme_minimal() 
+```
+
+Export the plot 
+Curious seems that gemo_fit_text does not work nice with export in gg...
+Export manually and works best
+```{r}
+# ggsave(filename = here::here("results", "global_parallel_plot.svg"),
+#        plot = global_parallel_plot,
+#        dpi = 300,
+#        units = "cm",
+#        width = 30, height = 10)
+ggsave(filename = here::here("results", "global_parallel_plot2.png"),
+       plot = global_parallel_plot,
+       dpi = 300,
+       units = "cm",
+       width = 30, height = 10) 
 ```
 
