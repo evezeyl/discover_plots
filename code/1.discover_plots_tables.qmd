@@ -34,6 +34,13 @@ library(ggfittext)
 library(tidyr)
 library(purrr)
 library(svglite)
+#library(janitor)
+library(gt)
+library(gtExtras)
+#library(gtsummary)
+#library(kableExtra)
+#kableExtra, webshot, magick
+
 ```
 
 # Data check and cleaning 
@@ -207,9 +214,160 @@ write.table(selected_data %>%
 ## Table for Shiga Toxin Gene
 
 ```{r}
-
+#Shiga 
+stx_all <- 
+  selected_data %>%
+  select(stx := stx.subtype, stx.subtype := stx.subtype_detail, Source) %>%
+  mutate_all(~if_else(is.na(.), "ND", .)) %>%
+  mutate(stx.subtype = str_remove_all(stx.subtype, " "),
+         stx = factor(stx, levels = c("stx1", "stx2", "stx1;stx2", "ND"), ordered = T)) %>%
+  group_by(stx, stx.subtype, Source) %>%
+  tally() %>%
+  tidyr::spread(Source, value = n, fill = 0) 
+  
+stx_all
 ```
 
+
+Export Complete Shiga 
+```{r}
+write.table(stx_all,
+            here("results", "2025-02-05_stx_all.tsv"),
+            sep = "\t", 
+            col.names = T, row.names = F,
+            quote = F)
+```
+
+
+now we need to reduce the table 
+- grouping <= 10 if in human or non human
+
+```{r}
+stx_compact <- 
+  stx_all %>%
+  ungroup() %>%
+  mutate(stx.subtype = case_when(
+    Human >= 10 | `Non Human` >= 10 ~ stx.subtype,
+    TRUE ~ "Other"
+  ))%>%
+  group_by(stx, stx.subtype) 
+
+# Output for a manual check 
+write.table(stx_compact,
+            here("results", "2025-02-05_stx_compact1.tsv"),
+            sep = "\t", 
+            col.names = T, row.names = F,
+            quote = F)
+
+# dput(sort(unique(stx_compact$stx.subtype)))  
+
+stx_sub_levels <- 
+  c("stx1a", "stx1c",  "stx1d", 
+    "stx2a", "stx2b", "stx2c", "stx2d", "stx2e", "stx2f", "stx2g", 
+    "stx2a;stx2c", "stx2a;stx2c;stx2d", 
+    "stx1a;stx2a", "stx1a;stx2b", "stx1a;stx2c", "stx1a;stx2d", "stx1c;stx2b",
+    "stx2a;stx2b",
+    "Other", "ND", "Total")
+
+stx_compact_total <- 
+  stx_compact %>%
+  ungroup() %>%
+  mutate(stx.subtype = factor(stx.subtype, levels = stx_sub_levels, ordered = T)) %>%
+  group_by(stx, stx.subtype) %>%
+  summarise(Human := sum(Human), `Non Human`:= sum(`Non Human`), .groups = "keep") 
+
+stx_compact_total
+```
+
+Adding sums per stx
+```{r}
+sums_stx <- 
+  stx_compact_total %>%
+    group_by(stx) %>%
+  summarise(Human := sum(Human), `Non Human`:= sum(`Non Human`), .groups = "keep") %>%
+  mutate(stx.subtype = "Total", .after = "stx") %>%
+  mutate(stx.subtype = factor(stx.subtype, levels = stx_sub_levels, ordered = T)) 
+
+stx_compact_total <- 
+  stx_compact_total %>%
+  bind_rows(sums_stx) %>% 
+  arrange(stx)
+```
+
+Pretty table 
+
+https://gt.rstudio.com/
+https://jthomasmock.github.io/gtExtras/
+https://themockup.blog/static/slides/intro-tables.html#26
+```{r}
+stx_compact_total %>% 
+  ungroup() %>%
+  gt(rowname_col = "stx.subtype",
+     groupname_col = "stx", 
+     process_md = TRUE, 
+     row_group_as_column = TRUE,
+     rownames_to_stub = FALSE) %>%
+  #opt_table_lines(extent = "none") %>%
+  opt_table_lines(extent = "default") %>%
+  tab_header(title = md("**Table 2:** Stx genes and stx subtypes identified in human and non-human sources.")) %>%
+  tab_spanner(label =  "Source", 
+              columns = c(Human, `Non Human`)) %>%
+  # gt::summary_rows(
+  #   groups = TRUE,
+  #   columns = c(`Human`, `Non Human`),
+  #   fns = list(Sum = ~sum(.))
+  #   ) # does no tappear to work so manual
+  tab_style(
+    style = list(
+      cell_text(weight = "bold")
+      ), 
+    locations = cells_row_groups( ) ) %>%
+  # tab_style(
+  #   style = list(), 
+  #   locations = cells_body(
+  #   columns = crop
+  #     )) %>% 
+  cols_align(
+    align = "left") 
+  gt::basic_theme()
+https://themockup.blog/posts/2020-09-26-functions-and-themes-for-gt-tables/#gt-themes
+basic_theme()? 
+
+stubhead.label
+stub 
+tab_
+row_group()
+  
+```
+
+
+
+<!--
+Hell with kable
+```{r}
+kbl(stx_compact_total %>% group_by(stx)) 
+   kableExtra::kable(stx_compact_total, 
+                     caption = "Table 2: Stx genes and stx subtypes identified in human and non-human sources.",
+                     format = "latex", booktabs = TRUE) %>%
+     kable_styling(font_size = 12) %>%
+     kableExtra::pack_rows(group_label = "stx", colnum = 1,
+               index = table(stx_compact_total$stx.subtype))
+
+#| html-table-processing: none
+
+summary_by_day %>%
+  select(-proj_detail) %>%
+  kbl(., caption = sprintf("Summary %s-%s", 
+                           min(summary_by_day$day), 
+                           max(summary_by_day$day))
+      ) %>%
+  column_spec(1, bold = T) %>%
+  collapse_rows(columns = 1, valign = "top") %>%
+  kable_material(c("striped", "hover",  "condensed", "responsive"), 
+                 font_size = 10) %>%
+  scroll_box(width = "100%", height = "600px")
+```
+--> 
 
 
 
