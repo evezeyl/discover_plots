@@ -1,9 +1,10 @@
 ---
-title: "parallel_plots"
+title: "Discover plots and tables"
 author: "Eve Zeyl Fiskebeck"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 params:
-    data: "data/STEC_isolate_inventory_WGS_Updated_20240205.xlsx"
+    data: "data/Cleaned_data_for_publication_STEC_isolate_inventory_WGS_20250205.xlsx"
+    sheet: "Cleaned_data" 
     source_code: 'code/R'
 execute: 
   echo: false
@@ -41,7 +42,8 @@ NOTE: The data is not clean - This is not normal (you should provide the data se
 
 ```{r}
 data <- readxl::read_excel(here::here(params$data),
-                           col_types = "text")
+                           sheet = params$sheet,
+                           na = "NA")
 glimpse(data) 
 ```
 
@@ -53,37 +55,62 @@ data selection - to ease making graphs (and only cleaning what I must)
 # last those I do not think I will use but keep anyway for now
 selected_data <- 
   data %>% 
+  mutate(Source = if_else(Source.Group == "Human", Source.Group , "Non Human"),
+         n = 1) %>%
+  rename(stx.subtype_detail = stx.subtype) %>%
+  mutate(stx.subtype = case_when(
+    str_detect(stx.subtype_detail, "stx1") & str_detect(stx.subtype_detail, "stx2") ~ "stx1;stx2",
+    str_detect(stx.subtype_detail, "stx1") & !str_detect(stx.subtype_detail, "stx2") ~ "stx1",
+    str_detect(stx.subtype_detail, "stx2") & !str_detect(stx.subtype_detail, "stx1") ~ "stx2",
+    TRUE ~ NA)) %>% 
+  mutate(eae = if_else(eae.y =="0", "Abscent", "Present")) %>%
   select(Country, Source.Group, 
-         stx, eae.x, MLST, O.group, H.type, 
-         Serotype.O, Serotype.H,  
+         Disease := `Disease..only.human.isolates.`,
+         MLST, 
+         stx.subtype, stx.subtype_detail,
+         stx.other.method :=`stx_subtypes identified by other methods`,
+         Serotype.O := SeroType.O, Serotype.H, SerotypeOH := O_H_combined_serotype, eae, eae.y,
          AMR.genes,
-         Source.Subgroup, Year.Isolation, Institute, Isolate.ID
-         ) 
+         Source, 
+         Source.Subgroup, Year.Isolation, Institute, Isolate.ID,
+         n
+) 
 glimpse(selected_data)
+View(selected_data)
 ```
 
-data quality -> in case need modifications fields
 
-```{r}
+# Data quality check 
+
+
+## Function to create summary table 
+```{r summary table function}
 # function for fast reuse of summary
 my_summary_fun <- function(data) {
   data %>%
     select(-Isolate.ID, -AMR.genes) %>%
     mutate_all(factor) %>%
-    summary(., maxsum = 200) %>%
+    summary(., maxsum = 400) %>%
     as.data.frame.matrix(row.names = NULL) %>% 
     mutate_all(~coalesce(., "")) %>%
     `rownames<-`( NULL ) 
 }
+
 ```
 
-Verification 
+Data check for homogeneity 
 
 ```{r}
-selected_data %>% 
-  my_summary_fun()  %>%
-  View()
+summary_table <- 
+  selected_data %>% 
+  my_summary_fun()  
 
+View(summary_table)
+```
+
+<!-- 
+## Data control helpers
+```{r}
 selected_data %>%
   select(MLST) %>%
   distinct() %>%
@@ -91,32 +118,30 @@ selected_data %>%
 ```
 
 
-
 THIS IS TO BE CHECKED : **Homoegeneizing NAs** 
 _Ask for treatment_
 
 
-<!-- 
-Most should be solved because need to take WGS
-* have to be filtered  - considered as right (even though made by 2 different methods)
+- [x] Serotype O -> ONT = O Non typeable. O112ab, bc osv treated at different serotypes
+- [x] Serotype H -> HNT = H Non typeable 
 
-- [ ] O group : 101/162 53/178 ... how to treat those ? X25  ? is it real ?
-- [ ] ST13864* ST21* ST301*       New ST (adk_... what is)  some with the same number have * and others not eg ] MLST eg ST10075 and ST10075*
-- [ ] Serotype O: O? , eg O128ab, O128ac -> should be merged or ?
-- [ ] Serotype H: H? -> unknwon
+OK, I think we can let as is 
+But for the column O:H serotype -> We leave as ONT:HNT possibilities (because we want it clear)
 
-Need to homogeneize what is uncertain 
---> 
+Need to homogeneize what is uncertain.
+Could have done in beginning but prefer control
 
-```{r}
-# The NA is already NA so we do not need to add (would mess up system)
-NAs <- c("^unknown$", "^Unknown$", 
-         "ST-", "^unknown ST", 
-         "O[?]", "H[?]" )
+Camilla has fixed the MLST
 
-new_ST <- c("New ST", "new ST")
+- [x] eae  -> presence / abscence re-encoded
+
+- [x] Data homogeneization 
+
+Unknown disease its because its only for humans, while NA its not applicable
+- so we week Unknown as is
 
 
+```{r replacement function}
 # Function to detect pattern in a cell and replace it by something else (eg. NA)
 replace_with_XX <- function(astring, patterns, XX) {
   
@@ -130,6 +155,13 @@ replace_with_XX <- function(astring, patterns, XX) {
   # True then replace with NA 
   ifelse(replace_decision, XX, astring)
 }
+```
+
+
+```{r}
+# The NA is already NA so we do not need to add (would mess up system)
+NAs <- c("^ONT$", "^HNT$", "^ND$" )
+
 
 # I finished to use Unknown as its more practical for the graph
 homegeneized_data <- 
@@ -140,33 +172,50 @@ homegeneized_data <-
   # Now I need to replace NA also 
   mutate(across(everything(), 
                 ~ purrr::map_vec(., function(x) ifelse(is.na(x), "Unknown",x))
-         )) %>% 
-  mutate(across(everything(), 
-                ~ purrr::map_vec(., replace_with_XX, new_ST, "New")
          ))
   
+  
 ```
+
+--> 
 
 
 Control 
 ```{r}
-homegeneized_data  %>% 
-  my_summary_fun()  %>%
-  View()
-
-homegeneized_data  %>% 
-  select(MLST) %>%
-  distinct() %>%
+selected_data %>% 
+  my_summary_fun() %>%
   View()
 ```
 
-!new ST are also now considered as a category New (no distinctions) (fix that if you do not want it)
+
+Export summary statistics
+```{r}
+write.table(selected_data %>% 
+              select( -n ) %>%
+              my_summary_fun(),
+            here("results", "2025-02-05_summary_table.tsv"),
+            sep = "\t", 
+            col.names = T, row.names = F,
+            quote = F)
+```
 
 
 
-# Manipulation data for making graphs
+# Data wrangling & make tables and graphs
 
-Parallel sets (Sankey like) plots (I want adding to 100 %)
+
+## Table for Shiga Toxin Gene
+
+```{r}
+
+```
+
+
+
+
+
+
+## Parallel sets (Sankey like) plots (I want adding to 100 %)
 
 ```{r}
 homegeneized_data %>%
