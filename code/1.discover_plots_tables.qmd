@@ -27,6 +27,7 @@ editor_options:
 library(here)
 library(readxl)
 library(dplyr)
+library(readr)
 library(stringr)
 library(ggplot2)
 library(ggalluvial)
@@ -36,10 +37,11 @@ library(purrr)
 library(svglite)
 #library(janitor)
 library(gt)
-library(gtExtras)
+#library(gtExtras)
+library(webshot2)
+
 #library(gtsummary)
-#library(kableExtra)
-#kableExtra, webshot, magick
+# magick
 
 ```
 
@@ -105,7 +107,7 @@ my_summary_fun <- function(data) {
 
 ```
 
-Data check for homogeneity 
+### Data check for homogeneity 
 
 ```{r}
 summary_table <- 
@@ -114,6 +116,9 @@ summary_table <-
 
 View(summary_table)
 ```
+
+### Previous data check for info
+> not needed anymore 
 
 <!-- 
 ## Data control helpers
@@ -186,7 +191,7 @@ homegeneized_data <-
 
 --> 
 
-
+### Data control 
 Control 
 ```{r}
 selected_data %>% 
@@ -194,8 +199,7 @@ selected_data %>%
   View()
 ```
 
-
-Export summary statistics
+### Export summary statistics
 ```{r}
 write.table(selected_data %>% 
               select( -n ) %>%
@@ -207,12 +211,103 @@ write.table(selected_data %>%
 ```
 
 
+## genes AMR and virulence checks 
+What data is inside (I did not look before)
+
+```{r}
+data_col <- 
+  data %>% 
+  names()
+
+data_col
+length(data_col[26:127])
+
+list_gene_fine <-c('asta', 'ipad', 'saa', 'agg3a', 'cif', 'espj', 'toxb', 'aggd', 'lpfa', 'cfac', 'agg3d', 'katp', 'espa', 'ltca', 'cnf1', 'espc', 'espb', 'aata', 'agg4c', 'tccp', 'stx1a', 'ipah9', 'lnga', 'tir', 'cdtb', 'iss', 'espf', 'tsh', 'espp', 'virf', 'agg5a', 'sfas', 'k88ab', 'bfpa', 'efa1', 'capu', 'agga', 'eila', 'pic', 'cma', 'vat', 'agg4d', 'agg4a', 'cci', 'siga', 'aar', 'stx2a', 'ehxa', 'mchb', 'senb', 'aafd', 'iha', 'aggc', 'stx2b', 'fim41a', 'etpd', 'fasa', 'mcma', 'nleb', 'aafa', 'nlea', 'sat', 'feda', 'nfae', 'iron', 'suba', 'pet', 'pera', 'aafc', 'air', 'agg3c', 'aaic', 'eae', 'epea', 'gad', 'sepa', 'rpea', 'hlye', 'fedf', 'aap', 'orf4', 'aggr', 'f17a', 'nlec', 'orf3', 'cba', 'fana', 'stb', 'aafb', 'mchc', 'eata', 'sta1', 'agg3b', 'mchf', 'aggb', 'stx1b', 'f17g', 'celb', 'cofa', 'espi', 'agg4b', 'irea')
+
+length(list_gene_fine)
+```
+
+102 genes consistent between reports AMR and list in script for the pipeline. 
+
+But Camilla mentione 145 - incl. virulotyper -> found db - check which genes are searched additionally
+
+```{r}
+virulotyper_genes<- readr::read_tsv(here::here("results", "sequences_list_virulotyper"), col_names = "gene" )
+
+virulotyper_genes <- 
+  virulotyper_genes %>%
+  mutate_at(.vars = "gene", ~str_remove(., "^>")) %>%
+  separate(gene, into = "gene", sep = "_", extra = "drop") %>%
+  distinct() %>%
+  pull()
+
+length(virulotyper_genes)
+```
+
+145 genes in virulotyper
+
+- finding those in virulotyper that are not in AMR
+```{r}
+diff_virulence <- setdiff(virulotyper_genes, list_gene_fine)
+dput(diff_virulence)
+
+length(diff_virulence)
+```
+
+checking reporting of AMR data : if 0 or contains also ND
+
+```{r}
+AMR_data <- 
+  data[,26:127] %>%
+  mutate_all(factor)
+
+AMR_data %>%
+  summary(., maxsum = 400) %>%
+    as.data.frame.matrix(row.names = NULL) %>% 
+    mutate_all(~coalesce(., "")) %>%
+    `rownames<-`( NULL )  %>%
+  View()
+```
+
+- only 0 So no ND 
+
+### Genes with only 0
+
+checking columns wich have only 0 -> so we can remove those from the data
+we need to have the levels
+```{r}
+nb_rows <- as.character(nrow(AMR_data))
+nb_rows
+sum_AMR_data <- 
+  AMR_data %>%
+  mutate_all(as.character) %>%
+  # Ensuring that we can differentiate from NA
+  mutate_all(~str_replace(.x, "0", "1")) %>%
+  mutate_all(as.numeric) %>%
+  summarise_all(~sum(.x, na.rm = T)) %>%
+  t() %>%
+  tibble::as_tibble(rownames = "gene") %>%
+  mutate_all(as.character)
+
+# now we have those to remove
+remove_AMR <- 
+  sum_AMR_data %>%
+  filter(V1 == nb_rows) %>%
+  pull(gene)
+  
+dput(remove_AMR)
+#data$ipad
+length(remove_AMR)
+```
+28 genes ... to be removed (cf Output data for Camilla)
+
 
 # Data wrangling & make tables and graphs
 
 
 ## Table for Shiga Toxin Gene
 
+### Global table 
 ```{r}
 #Shiga 
 stx_all <- 
@@ -232,7 +327,7 @@ stx_all
 Export Complete Shiga 
 ```{r}
 write.table(stx_all,
-            here("results", "2025-02-05_stx_all.tsv"),
+            here("results", "2025-02-06_stx_all.tsv"),
             sep = "\t", 
             col.names = T, row.names = F,
             quote = F)
@@ -250,17 +345,14 @@ stx_compact <-
     Human >= 10 | `Non Human` >= 10 ~ stx.subtype,
     TRUE ~ "Other"
   ))%>%
-  group_by(stx, stx.subtype) 
+  group_by(stx, stx.subtype) %>%
+  arrange(stx, stx.subtype)
 
-# Output for a manual check 
-write.table(stx_compact,
-            here("results", "2025-02-05_stx_compact1.tsv"),
-            sep = "\t", 
-            col.names = T, row.names = F,
-            quote = F)
+stx_compact %>% View()
+
+
 
 # dput(sort(unique(stx_compact$stx.subtype)))  
-
 stx_sub_levels <- 
   c("stx1a", "stx1c",  "stx1d", 
     "stx2a", "stx2b", "stx2c", "stx2d", "stx2e", "stx2f", "stx2g", 
@@ -269,6 +361,7 @@ stx_sub_levels <-
     "stx2a;stx2b",
     "Other", "ND", "Total")
 
+
 stx_compact_total <- 
   stx_compact %>%
   ungroup() %>%
@@ -276,31 +369,48 @@ stx_compact_total <-
   group_by(stx, stx.subtype) %>%
   summarise(Human := sum(Human), `Non Human`:= sum(`Non Human`), .groups = "keep") 
 
-stx_compact_total
+stx_compact_total %>% View()
 ```
 
+### Tables with sums 
 Adding sums per stx
 ```{r}
 sums_stx <- 
   stx_compact_total %>%
-    group_by(stx) %>%
+  ungroup() %>%
+  group_by(stx) %>%
   summarise(Human := sum(Human), `Non Human`:= sum(`Non Human`), .groups = "keep") %>%
   mutate(stx.subtype = "Total", .after = "stx") %>%
-  mutate(stx.subtype = factor(stx.subtype, levels = stx_sub_levels, ordered = T)) 
+  mutate(stx.subtype = factor(stx.subtype, levels = stx_sub_levels, ordered = T)) %>%
+  # we remove ND because it will be the same 
+  filter(stx != "ND")
 
+# Now merging so we can have display 
 stx_compact_total <- 
   stx_compact_total %>%
   bind_rows(sums_stx) %>% 
-  arrange(stx)
+  arrange(stx) 
+
+stx_compact_total %>% View()
+
+# Output for an eventual manual formatting
+write.table(stx_compact_total,
+            here("results", "2025-02-06_stx_compact_Total.tsv"),
+            sep = "\t", 
+            col.names = T, row.names = F,
+            quote = F)
+
+
 ```
 
-Pretty table 
+### simple pretty table with gt
 
 https://gt.rstudio.com/
 https://jthomasmock.github.io/gtExtras/
 https://themockup.blog/static/slides/intro-tables.html#26
 ```{r}
-stx_compact_total %>% 
+stx_gt_table <- 
+  stx_compact_total %>% 
   ungroup() %>%
   gt(rowname_col = "stx.subtype",
      groupname_col = "stx", 
@@ -329,48 +439,25 @@ stx_compact_total %>%
   #     )) %>% 
   cols_align(
     align = "left") 
-  gt::basic_theme()
-https://themockup.blog/posts/2020-09-26-functions-and-themes-for-gt-tables/#gt-themes
-basic_theme()? 
+  
 
-stubhead.label
-stub 
-tab_
-row_group()
+# gt::basic_theme()
+# https://themockup.blog/posts/2020-09-26-functions-and-themes-for-gt-tables/#gt-themes
+# basic_theme()? 
+# 
+# stubhead.label
+# stub 
+# tab_
+# row_group()
   
 ```
 
 
-
-<!--
-Hell with kable
 ```{r}
-kbl(stx_compact_total %>% group_by(stx)) 
-   kableExtra::kable(stx_compact_total, 
-                     caption = "Table 2: Stx genes and stx subtypes identified in human and non-human sources.",
-                     format = "latex", booktabs = TRUE) %>%
-     kable_styling(font_size = 12) %>%
-     kableExtra::pack_rows(group_label = "stx", colnum = 1,
-               index = table(stx_compact_total$stx.subtype))
+stx_gt_table
 
-#| html-table-processing: none
-
-summary_by_day %>%
-  select(-proj_detail) %>%
-  kbl(., caption = sprintf("Summary %s-%s", 
-                           min(summary_by_day$day), 
-                           max(summary_by_day$day))
-      ) %>%
-  column_spec(1, bold = T) %>%
-  collapse_rows(columns = 1, valign = "top") %>%
-  kable_material(c("striped", "hover",  "condensed", "responsive"), 
-                 font_size = 10) %>%
-  scroll_box(width = "100%", height = "600px")
+gtsave(stx_gt_table, "stx_gt_table.png", here::here("results"))
 ```
---> 
-
-
-
 
 
 ## Parallel sets (Sankey like) plots (I want adding to 100 %)
@@ -441,4 +528,29 @@ ggsave(filename = here::here("results", "global_parallel_plot2.png"),
        units = "cm",
        width = 30, height = 10) 
 ```
+
+
+# Output data for Camilla 
+
+```{r}
+dim(data)
+data %>%
+  # remove genes with 0 
+  select(!remove_AMR) %>%
+  # rename col - homogeneity
+  rename(SeroType.H = Serotype.H) %>%
+  # Source added
+  mutate(Source = if_else(Source.Group == "Human", Source.Group , "Non Human"),
+         n = 1) %>%
+  # Additional column stx classification vs detail
+  rename(stx.subtype_detail = stx.subtype) %>%
+  mutate(stx.subtype = case_when(
+    str_detect(stx.subtype_detail, "stx1") & str_detect(stx.subtype_detail, "stx2") ~ "stx1;stx2",
+    str_detect(stx.subtype_detail, "stx1") & !str_detect(stx.subtype_detail, "stx2") ~ "stx1",
+    str_detect(stx.subtype_detail, "stx2") & !str_detect(stx.subtype_detail, "stx1") ~ "stx2",
+    TRUE ~ NA)) %>% 
+  # pathogenecity island re-encoding
+  mutate(eae = if_else(eae.y =="0", "Abscent", "Present")) %>%
+```
+
 
