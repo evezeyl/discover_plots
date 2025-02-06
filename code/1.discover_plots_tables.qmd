@@ -38,6 +38,7 @@ library(svglite)
 library(ggrepel)
 library(gt)
 library(webshot2)
+library(forcats)
 
 #library(janitor)
 #library(gtExtras)
@@ -588,8 +589,8 @@ dput(unique(unique(parallel_data1$stx)))
 dput(unique(unique(parallel_data1$eae)))
 
 
-source_levels <- unique(parallel_data1$Source)
-eae_levels <- c("Present", "Abscent")
+source_levels <- c(unique(parallel_data1$Source), NA)
+eae_levels <- c("Present", "Abscent", NA)
 stx_levels <- c("stx1", "stx2", "stx1\nstx2", NA)
 
 sero_count <- 
@@ -616,32 +617,146 @@ sero_levels <-
   filter(sero_transfo != "Other") %>%
   pull(SeroTypeOH)
 
-sero_levels <- c(sero_levels, "Other")
+sero_levels <- c(sero_levels, "Other", NA)
+
+length(sero_levels) # 9 + Other should be ok
 ```
 
 Now I can get the data set with the groups and ordered levels 
 
+! HERE we do not want to drop NA levels
 ```{r}
 parallel_data2 <- 
   parallel_data1 %>%
   # Needs to be done first - because otherwise levels will not be changed
   mutate(SeroTypeOH  = if_else(SeroTypeOH %in% sero_other, "Other", SeroTypeOH)) %>%
   # it needs to be Origin that is ordered - its the one used in the stash for plot
-  mutate(Origin = factor(Source, levels = source_levels, ordered = T),
-         eae = factor(eae, levels = eae_levels, ordered = T),
-         stx = factor(stx, levels = stx_levels, ordered = T),
-         SeroTypeOH = factor(SeroTypeOH, levels = sero_levels, ordered = T))
+  mutate(Origin = factor(Source, levels = source_levels, ordered = T, exclude = NULL),
+         eae = factor(eae, levels = eae_levels, ordered = T, exclude = NULL),
+         stx = factor(stx, levels = stx_levels, ordered = T, exclude = NULL),
+         SeroTypeOH = factor(SeroTypeOH, levels = sero_levels, ordered = T, exclude = NULL)
+         )
+
+parallel_data2 %>% View()
 ```
 
+
+
+### Counts 
+I do not want the counts before because I want to be sure the factor order are respeced 
+and that is done above in parallel2_data 
+so its better to modify here 
+
+! IF NA count is not 0 - needs to be modified 
+
+```{r}
+count_origin <- 
+  parallel_data2 %>%
+  group_by(Origin) %>%
+  summarise(sum_Origin = sum(n)) %>%
+  pull(sum_Origin)
+count_origin
+# NA count is O
+source_levels
+source_levels <- paste(source_levels, c(count_origin, 0), sep = "\n")
+source_levels
+
+count_eae <- 
+  parallel_data2 %>%
+  group_by(eae) %>%
+  summarise(sum_eae = sum(n)) %>%
+  pull(sum_eae)
+count_eae
+
+eae_levels
+eae_levels <- paste(eae_levels, c(count_eae,0), sep = "\n")
+eae_levels
+
+count_stx <- 
+  parallel_data2 %>%
+  group_by(stx) %>%
+  summarise(sum_stx = sum(n)) %>%
+  pull(sum_stx)
+count_stx
+# here there is NA that is counted
+stx_levels
+stx_levels <- paste(stx_levels, count_stx, sep = "\n")
+stx_levels
+
+#OH levels for those grouped
+count_OH <- 
+  parallel_data2 %>%
+  group_by(SeroTypeOH) %>%
+  summarise(sum_OH = sum(n)) %>%
+  pull(sum_OH)
+count_OH
+
+# Here there is no NA 
+sero_levels
+sero_levels <- paste(sero_levels, c(count_OH,0), sep = "\n")
+sero_levels
+```
+
+### Recoding factors 
+recoding factors  eg. https://www.spsanderson.com/steveondata/posts/2024-03-05/index.html
+dplyr: https://dplyr.tidyverse.org/reference/recode.html
+
+```{r}
+# Now we need to adjust the table 
+# need to recode factors 
+
+parallel_data3 <- parallel_data2
+
+# because I kept the order this could work
+# NO NA -> here I add brachets for clarity for n ()
+parallel_data3$Origin <- fct_recode(parallel_data3$Origin, 
+                                 "Human\n(2405)" = "Human", 
+                                  "Non Human\n(1013)" = "Non Human")
+
+parallel_data3$eae<- fct_recode(parallel_data3$eae,
+                                "Present\n(1821)" = "Present",
+                                "Abscent\n(1597)" = "Abscent")
+
+# Here there is  NA 
+parallel_data3$stx<- fct_recode(parallel_data3$stx,
+                                "stx1\n(850)"    = "stx1",
+                                "stx2\n(1755)"   = "stx2", 
+                                "stx1\nstx2\n(791)"   = "stx1\nstx2",
+                                "NA\n(22)"  = NA_character_)
+
+# last no NA 
+sero_levels
+parallel_data3$SeroTypeOH<- fct_recode(parallel_data3$SeroTypeOH, 
+                                       "O157:H7\n(785)" = "O157:H7",
+                                       "O26:H11\n(419)" = "O26:H11",
+                                       "O146:H21\n(154)"= "O146:H21",
+                                       "O103:H2\n(149)" = "O103:H2",
+                                       "O91:H14\n(130)" = "O91:H14",
+                                       "O128ab:H2\n(105)" = "O128ab:H2",
+                                       "O111:H8\n(73)" = "O111:H8",
+                                       "O146:H28\n(66)"= "O146:H28",
+                                       "O145:HNT\n(54)"= "O145:HNT",
+                                       "Other\n(1483)" = "Other"
+                                       )
+
+
+levels(parallel_data3$SeroTypeOH)
+# now dropping unused factors 
+parallel_data3 <- 
+  parallel_data3 %>%
+  mutate(across(where(is.factor), fct_drop))
+
+View(parallel_data3)
+```
 
 ### Long format data for final 
 
 ```{r}
-parallel_data_long2 <- 
-  parallel_data2 %>%
+parallel_data_long3 <- 
+  parallel_data3 %>%
   # so all the columns we want to show in alluvial need to be in long format
   # But not the fill which is source
-  to_lodes_form(key = "col",
+  to_lodes_form(key = "Types",
                 axes = c("Origin", "eae", "stx", "SeroTypeOH"),
                 value = "stratum",
                 id = "alluvium") 
@@ -652,15 +767,15 @@ parallel_data_long2 <-
 
 ```{r}
 # to be able to resize the text we need to go to long format
-global_parallel_plot2 <- 
-  parallel_data_long2 %>%
+global_parallel_plot3 <- 
+  parallel_data_long3 %>%
   # mutate(text_size = case_when(
   #   col == "Origin" | col == "eae" | col == "stx" ~ 1,
   #   col == "SeroTypeOH" ~ 1,
   #   TRUE ~ .3)
   #   ) %>%
   ggplot(.,
-         aes(x = col, y = `%`,
+         aes(x = Types, y = `%`,
              stratum = stratum, 
              alluvium = alluvium,
              label = stratum)) +
@@ -668,10 +783,11 @@ global_parallel_plot2 <-
   #geom_stratum(width = 1/2) +
   geom_stratum() + 
   # Need to be first
+  # ! REMEMBER to change NA if changed - incl. way to filter
   ggrepel::geom_text_repel(
-    data = parallel_data_long %>%
-      filter(col == "stx" & is.na(stratum)), 
-    aes(label = "NA"),
+    data = parallel_data_long3 %>%
+      filter(Types == "stx" & (stratum == "NA\n(22)")), 
+    aes(label = "NA (22)"),
     stat = "stratum", size = 3, direction = "y", nudge_x = -.5) +
   # need to be second
    geom_fit_text(
@@ -681,24 +797,15 @@ global_parallel_plot2 <-
   ggtitle("Percentage of isolates belonging to the classicaly typing systems") + 
   theme_minimal() 
 
-global_parallel_plot2
+global_parallel_plot3
 
 ```
 
+###  Export the final plot 
 
-
-
-# Export the plot 
-Curious seems that gemo_fit_text does not work nice with export in gg...
-Export manually and works best
 ```{r}
-# ggsave(filename = here::here("results", "global_parallel_plot.svg"),
-#        plot = global_parallel_plot,
-#        dpi = 300,
-#        units = "cm",
-#        width = 30, height = 10)
-ggsave(filename = here::here("results", "global_parallel_plot2.png"),
-       plot = global_parallel_plot,
+ggsave(filename = here::here("results", "global_parallel_plot3.png"),
+       plot = global_parallel_plot3,
        dpi = 300,
        units = "cm",
        width = 30, height = 10) 
