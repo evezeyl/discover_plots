@@ -35,11 +35,12 @@ library(ggfittext)
 library(tidyr)
 library(purrr)
 library(svglite)
-#library(janitor)
+library(ggrepel)
 library(gt)
-#library(gtExtras)
 library(webshot2)
 
+#library(janitor)
+#library(gtExtras)
 #library(gtsummary)
 # magick
 
@@ -50,13 +51,37 @@ library(webshot2)
 NOTE: The data is not clean - This is not normal (you should provide the data set with a table that can be used directly in an analysis software - so the formating should be rechecked)
 
 ```{r}
-data <- readxl::read_excel(here::here(params$data),
+data1 <- readxl::read_excel(here::here(params$data),
                            sheet = params$sheet,
                            na = "NA")
-glimpse(data) 
+glimpse(data1) 
 ```
 
-data selection - to ease making graphs (and only cleaning what I must)
+# Data pretifying & for homogeneity for all datasets
+
+```{r}
+data <- 
+  data1 %>%
+  # Source added
+  mutate(Source = if_else(Source.Group == "Human", Source.Group , "Non Human"),
+         n = 1) %>%
+  # Additional column stx classification vs detail
+  rename(stx.subtype_detail = stx.subtype) %>%
+  mutate(stx.subtype = case_when(
+    str_detect(stx.subtype_detail, "stx1") & str_detect(stx.subtype_detail, "stx2") ~ "stx1;stx2",
+    str_detect(stx.subtype_detail, "stx1") & !str_detect(stx.subtype_detail, "stx2") ~ "stx1",
+    str_detect(stx.subtype_detail, "stx2") & !str_detect(stx.subtype_detail, "stx1") ~ "stx2",
+    TRUE ~ NA)) %>% 
+  # pathogenecity island re-encoding
+  mutate(eae = if_else(eae.y =="0", "Abscent", "Present")) %>%
+  # rename col - homogeneity
+  rename(SeroType.H = Serotype.H)
+
+# add here if other things detected and rerun
+  
+```
+
+# Data selection - to ease making graphs (and only cleaning what I must)
 
 - based on lab data 
 ```{r}
@@ -64,21 +89,12 @@ data selection - to ease making graphs (and only cleaning what I must)
 # last those I do not think I will use but keep anyway for now
 selected_data <- 
   data %>% 
-  mutate(Source = if_else(Source.Group == "Human", Source.Group , "Non Human"),
-         n = 1) %>%
-  rename(stx.subtype_detail = stx.subtype) %>%
-  mutate(stx.subtype = case_when(
-    str_detect(stx.subtype_detail, "stx1") & str_detect(stx.subtype_detail, "stx2") ~ "stx1;stx2",
-    str_detect(stx.subtype_detail, "stx1") & !str_detect(stx.subtype_detail, "stx2") ~ "stx1",
-    str_detect(stx.subtype_detail, "stx2") & !str_detect(stx.subtype_detail, "stx1") ~ "stx2",
-    TRUE ~ NA)) %>% 
-  mutate(eae = if_else(eae.y =="0", "Abscent", "Present")) %>%
   select(Country, Source.Group, 
          Disease := `Disease..only.human.isolates.`,
          MLST, 
          stx.subtype, stx.subtype_detail,
          stx.other.method :=`stx_subtypes identified by other methods`,
-         Serotype.O := SeroType.O, Serotype.H, SerotypeOH := O_H_combined_serotype, eae, eae.y,
+         Serotype.O := SeroType.O, SeroType.H, SeroTypeOH := O_H_combined_serotype, eae, eae.y,
          AMR.genes,
          Source, 
          Source.Subgroup, Year.Isolation, Institute, Isolate.ID,
@@ -204,15 +220,16 @@ selected_data %>%
 write.table(selected_data %>% 
               select( -n ) %>%
               my_summary_fun(),
-            here("results", "2025-02-05_summary_table.tsv"),
+            here("results", "2025-02-06_summary_table_col.tsv"),
             sep = "\t", 
             col.names = T, row.names = F,
             quote = F)
 ```
 
 
-## genes AMR and virulence checks 
+# Genes AMR and virulence checks - remove from data 
 What data is inside (I did not look before)
+
 
 ```{r}
 data_col <- 
@@ -220,11 +237,16 @@ data_col <-
   names()
 
 data_col
-length(data_col[26:127])
+
+list_gene_data <- data_col[which (data_col == "asta"):which (data_col == "irea")]
+length(list_gene_data)
 
 list_gene_fine <-c('asta', 'ipad', 'saa', 'agg3a', 'cif', 'espj', 'toxb', 'aggd', 'lpfa', 'cfac', 'agg3d', 'katp', 'espa', 'ltca', 'cnf1', 'espc', 'espb', 'aata', 'agg4c', 'tccp', 'stx1a', 'ipah9', 'lnga', 'tir', 'cdtb', 'iss', 'espf', 'tsh', 'espp', 'virf', 'agg5a', 'sfas', 'k88ab', 'bfpa', 'efa1', 'capu', 'agga', 'eila', 'pic', 'cma', 'vat', 'agg4d', 'agg4a', 'cci', 'siga', 'aar', 'stx2a', 'ehxa', 'mchb', 'senb', 'aafd', 'iha', 'aggc', 'stx2b', 'fim41a', 'etpd', 'fasa', 'mcma', 'nleb', 'aafa', 'nlea', 'sat', 'feda', 'nfae', 'iron', 'suba', 'pet', 'pera', 'aafc', 'air', 'agg3c', 'aaic', 'eae', 'epea', 'gad', 'sepa', 'rpea', 'hlye', 'fedf', 'aap', 'orf4', 'aggr', 'f17a', 'nlec', 'orf3', 'cba', 'fana', 'stb', 'aafb', 'mchc', 'eata', 'sta1', 'agg3b', 'mchf', 'aggb', 'stx1b', 'f17g', 'celb', 'cofa', 'espi', 'agg4b', 'irea')
 
 length(list_gene_fine)
+
+setdiff(list_gene_fine, list_gene_data)
+
 ```
 
 102 genes consistent between reports AMR and list in script for the pipeline. 
@@ -302,12 +324,21 @@ length(remove_AMR)
 28 genes ... to be removed (cf Output data for Camilla)
 
 
-# Data wrangling & make tables and graphs
+## Update DATA remove 0 genes
+
+```{r}
+dim(data)
+data <- 
+  data %>%
+  # remove genes with 0 
+  select(!remove_AMR) 
+  
+```
 
 
-## Table for Shiga Toxin Gene
+# Table FOR Shiga Toxin Gene
 
-### Global table 
+## Global table 
 ```{r}
 #Shiga 
 stx_all <- 
@@ -372,7 +403,7 @@ stx_compact_total <-
 stx_compact_total %>% View()
 ```
 
-### Tables with sums 
+## Tables with sums 
 Adding sums per stx
 ```{r}
 sums_stx <- 
@@ -394,16 +425,16 @@ stx_compact_total <-
 stx_compact_total %>% View()
 
 # Output for an eventual manual formatting
-write.table(stx_compact_total,
-            here("results", "2025-02-06_stx_compact_Total.tsv"),
-            sep = "\t", 
-            col.names = T, row.names = F,
-            quote = F)
+# write.table(stx_compact_total,
+#             here("results", "2025-02-06_stx_compact_Total.tsv"),
+#             sep = "\t", 
+#             col.names = T, row.names = F,
+#             quote = F)
 
 
 ```
 
-### simple pretty table with gt
+## simple pretty table with gt
 
 https://gt.rstudio.com/
 https://jthomasmock.github.io/gtExtras/
@@ -452,6 +483,7 @@ stx_gt_table <-
   
 ```
 
+## Export
 
 ```{r}
 stx_gt_table
@@ -459,61 +491,204 @@ stx_gt_table
 gtsave(stx_gt_table, "stx_gt_table.png", here::here("results"))
 ```
 
+# Parallel sets (Sankey like) plots (I want adding to 100 %)
+Now I used ggalluvial 
 
-## Parallel sets (Sankey like) plots (I want adding to 100 %)
-
+## Prepare data - first exploration
 ```{r}
-homegeneized_data %>%
-  glimpse()
-
-# To be able to resize and adjust it appears that long format will be easier
-long_data <- 
-  homegeneized_data %>%
-  select(-Isolate.ID) %>%
-  mutate(Source = 
-           ifelse(Source.Group == "Human", Source.Group, "Non\nhuman")
-         ) %>%
-  mutate_at(vars(stx), ~str_replace(., ";", "\n")) %>%
-  mutate(nbrow = 1) %>%
-  mutate(`%` = nbrow / sum(nbrow) * 100) %>%
-  select(-Source.Group, -Institute, -Source.Subgroup, -nbrow) %>%
-  # trying to order to make the graph a bit clearer
-  arrange(Source, eae.x, stx, O.group, H.type, MLST) %>% 
+parallel_data1 <- 
+  data %>%
+  select(Source, eae, stx := stx.subtype, SeroTypeOH := O_H_combined_serotype, n) %>%
+  # reformating for better display
+  mutate(Source = str_replace(Source, "Non human", "Non\nHuman")) %>%
+  mutate(stx = str_remove_all(stx, " ")) %>%
+  mutate(stx = str_replace(stx, ";", "\n")) %>%
+  mutate(`%` = n / sum(n) * 100) %>%
+  # We need this column twice (under different names)
   mutate(Origin  = Source) %>%
-  # so all the columns we want to show in alluvial need to be in long format
-  # But not the fill 
-  to_lodes_form(key = "col",
-                axes = c("Origin", "eae.x", "stx", "O.group","H.type", "MLST"),
-                value = "stratum",
-                id = "alluvium") 
-head(long_data)
-View(long_data)
+  # trying to order to make the graph a bit clearer
+  arrange(Source, eae, stx, SeroTypeOH) 
+
+glimpse(parallel_data)
 ```
 
+data check 
+- stx with NA 
+```{r}
+parallel_data1 %>%
+  mutate_all(factor) %>%
+    summary(., maxsum = 400) %>%
+    as.data.frame.matrix(row.names = NULL) %>% 
+    mutate_all(~coalesce(., "")) %>%
+    `rownames<-`( NULL ) %>%
+  View()
+
+```
+
+
+### Long format first exploration exploration
+Transform to long format, as it appears to be better to adjust the plot
+```{r}
+parallel_data_long1 <- 
+  parallel_data1 %>%
+  # so all the columns we want to show in alluvial need to be in long format
+  # But not the fill which is source
+  to_lodes_form(key = "col",
+                axes = c("Origin", "eae", "stx", "SeroTypeOH"),
+                value = "stratum",
+                id = "alluvium") 
+head(parallel_data_long1)
+View(parallel_data_long1)
+```
+
+
+First view of the plot (here I did not filter aex)
 
 ```{r}
 # to be able to resize the text we need to go to long format
-global_parallel_plot <- 
-  long_data %>%
-  mutate(text_size = case_when(
-    col == "Origin" | col == "eae.x" | col == "stx" ~ 1,
-    col == "O.group" | col == "H.type" ~ 1,
-    TRUE ~ .3)
-    ) %>% 
-  ggplot(., 
-       aes(x = col, y = `%`,
-           stratum = stratum, 
-           alluvium = alluvium,
-           label = stratum)) + 
+global_parallel_plot1 <- 
+  parallel_data_long1 %>%
+  ggplot(.,
+         aes(x = col, y = `%`,
+             stratum = stratum, 
+             alluvium = alluvium,
+             label = stratum)) +
+  geom_alluvium(aes(fill = Source)) +
+  geom_stratum() + 
+  # Need to be first
+  ggrepel::geom_text_repel(
+    data = parallel_data_long %>%
+      filter(col == "stx" & is.na(stratum)), 
+    aes(label = "NA"),
+    stat = "stratum", size = 3, direction = "y", nudge_x = -.5) +
+  # need to be second
+   geom_fit_text(
+       stat = "stratum", min.size = 1) +
+  ggtitle("Percentage of isolates belonging to the classicaly typing systems") + 
+  theme_minimal() 
+
+global_parallel_plot1
+```
+
+
+```{r}
+ggsave(filename = here::here("results", "global_parallel_plot1.png"),
+       plot = global_parallel_plot1,
+       dpi = 300,
+       units = "cm",
+       width = 30, height = 10) 
+```
+
+
+
+## Preparing for final plotting - order and grouping some variables 
+
+```{r}
+dput(unique(unique(parallel_data1$stx)))
+dput(unique(unique(parallel_data1$eae)))
+
+
+source_levels <- unique(parallel_data1$Source)
+eae_levels <- c("Present", "Abscent")
+stx_levels <- c("stx1", "stx2", "stx1\nstx2", NA)
+
+sero_count <- 
+  parallel_data1 %>%
+  select(SeroTypeOH, n) %>%
+  group_by(SeroTypeOH) %>%
+  summarise(sero_sum := sum(n), .groups = "keep") %>%
+  arrange(desc(sero_sum)) %>%
+  mutate(sero_transfo = if_else(sero_sum >= 50, SeroTypeOH, "Other"))
+
+# those are those to group as Other
+sero_other <- 
+  sero_count %>% 
+    filter(sero_transfo == "Other") %>%
+    pull(SeroTypeOH)
+
+length(sero_other)
+dput(sero_other)
+
+
+# order levels
+sero_levels <- 
+  sero_count %>%
+  filter(sero_transfo != "Other") %>%
+  pull(SeroTypeOH)
+
+sero_levels <- c(sero_levels, "Other")
+```
+
+Now I can get the data set with the groups and ordered levels 
+
+```{r}
+parallel_data2 <- 
+  parallel_data1 %>%
+  # Needs to be done first - because otherwise levels will not be changed
+  mutate(SeroTypeOH  = if_else(SeroTypeOH %in% sero_other, "Other", SeroTypeOH)) %>%
+  # it needs to be Origin that is ordered - its the one used in the stash for plot
+  mutate(Origin = factor(Source, levels = source_levels, ordered = T),
+         eae = factor(eae, levels = eae_levels, ordered = T),
+         stx = factor(stx, levels = stx_levels, ordered = T),
+         SeroTypeOH = factor(SeroTypeOH, levels = sero_levels, ordered = T))
+```
+
+
+### Long format data for final 
+
+```{r}
+parallel_data_long2 <- 
+  parallel_data2 %>%
+  # so all the columns we want to show in alluvial need to be in long format
+  # But not the fill which is source
+  to_lodes_form(key = "col",
+                axes = c("Origin", "eae", "stx", "SeroTypeOH"),
+                value = "stratum",
+                id = "alluvium") 
+```
+
+
+### Final Plot
+
+```{r}
+# to be able to resize the text we need to go to long format
+global_parallel_plot2 <- 
+  parallel_data_long2 %>%
+  # mutate(text_size = case_when(
+  #   col == "Origin" | col == "eae" | col == "stx" ~ 1,
+  #   col == "SeroTypeOH" ~ 1,
+  #   TRUE ~ .3)
+  #   ) %>%
+  ggplot(.,
+         aes(x = col, y = `%`,
+             stratum = stratum, 
+             alluvium = alluvium,
+             label = stratum)) +
   geom_alluvium(aes(fill = Source)) +
   #geom_stratum(width = 1/2) +
   geom_stratum() + 
-  geom_fit_text(stat = "stratum", min.size = 1) +
+  # Need to be first
+  ggrepel::geom_text_repel(
+    data = parallel_data_long %>%
+      filter(col == "stx" & is.na(stratum)), 
+    aes(label = "NA"),
+    stat = "stratum", size = 3, direction = "y", nudge_x = -.5) +
+  # need to be second
+   geom_fit_text(
+       stat = "stratum", min.size = 1) +
+  # aes(label = ifelse(col == "stx" & is.na(stratum), "NA", NA)),
+  #  stat = "stratum", size = 1, direction = "y", nudge_x = -.5) +
   ggtitle("Percentage of isolates belonging to the classicaly typing systems") + 
   theme_minimal() 
+
+global_parallel_plot2
+
 ```
 
-Export the plot 
+
+
+
+# Export the plot 
 Curious seems that gemo_fit_text does not work nice with export in gg...
 Export manually and works best
 ```{r}
@@ -537,20 +712,7 @@ dim(data)
 data %>%
   # remove genes with 0 
   select(!remove_AMR) %>%
-  # rename col - homogeneity
-  rename(SeroType.H = Serotype.H) %>%
-  # Source added
-  mutate(Source = if_else(Source.Group == "Human", Source.Group , "Non Human"),
-         n = 1) %>%
-  # Additional column stx classification vs detail
-  rename(stx.subtype_detail = stx.subtype) %>%
-  mutate(stx.subtype = case_when(
-    str_detect(stx.subtype_detail, "stx1") & str_detect(stx.subtype_detail, "stx2") ~ "stx1;stx2",
-    str_detect(stx.subtype_detail, "stx1") & !str_detect(stx.subtype_detail, "stx2") ~ "stx1",
-    str_detect(stx.subtype_detail, "stx2") & !str_detect(stx.subtype_detail, "stx1") ~ "stx2",
-    TRUE ~ NA)) %>% 
-  # pathogenecity island re-encoding
-  mutate(eae = if_else(eae.y =="0", "Abscent", "Present")) %>%
+  
 ```
 
 
