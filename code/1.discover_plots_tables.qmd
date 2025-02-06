@@ -516,13 +516,13 @@ glimpse(parallel_data)
 data check 
 - stx with NA 
 ```{r}
-parallel_data1 %>%
-  mutate_all(factor) %>%
-    summary(., maxsum = 400) %>%
-    as.data.frame.matrix(row.names = NULL) %>% 
-    mutate_all(~coalesce(., "")) %>%
-    `rownames<-`( NULL ) %>%
-  View()
+# parallel_data1 %>%
+#   mutate_all(factor) %>%
+#     summary(., maxsum = 400) %>%
+#     as.data.frame.matrix(row.names = NULL) %>% 
+#     mutate_all(~coalesce(., "")) %>%
+#     `rownames<-`( NULL ) %>%
+#   View()
 
 ```
 
@@ -538,8 +538,8 @@ parallel_data_long1 <-
                 axes = c("Origin", "eae", "stx", "SeroTypeOH"),
                 value = "stratum",
                 id = "alluvium") 
-head(parallel_data_long1)
-View(parallel_data_long1)
+# head(parallel_data_long1)
+# View(parallel_data_long1)
 ```
 
 
@@ -568,16 +568,16 @@ global_parallel_plot1 <-
   ggtitle("Percentage of isolates belonging to the classicaly typing systems") + 
   theme_minimal() 
 
-global_parallel_plot1
+#global_parallel_plot1
 ```
 
 
 ```{r}
-ggsave(filename = here::here("results", "global_parallel_plot1.png"),
-       plot = global_parallel_plot1,
-       dpi = 300,
-       units = "cm",
-       width = 30, height = 10) 
+# ggsave(filename = here::here("results", "global_parallel_plot1.png"),
+#        plot = global_parallel_plot1,
+#        dpi = 300,
+#        units = "cm",
+#        width = 30, height = 10) 
 ```
 
 
@@ -632,12 +632,14 @@ parallel_data2 <-
   mutate(SeroTypeOH  = if_else(SeroTypeOH %in% sero_other, "Other", SeroTypeOH)) %>%
   # it needs to be Origin that is ordered - its the one used in the stash for plot
   mutate(Origin = factor(Source, levels = source_levels, ordered = T, exclude = NULL),
+         Source = factor(Source, levels = source_levels, ordered = T, exclude = NULL),
          eae = factor(eae, levels = eae_levels, ordered = T, exclude = NULL),
          stx = factor(stx, levels = stx_levels, ordered = T, exclude = NULL),
          SeroTypeOH = factor(SeroTypeOH, levels = sero_levels, ordered = T, exclude = NULL)
          )
 
-parallel_data2 %>% View()
+glimpse(parallel_data2)
+#parallel_data2 %>% View()
 ```
 
 
@@ -706,22 +708,22 @@ dplyr: https://dplyr.tidyverse.org/reference/recode.html
 # need to recode factors 
 
 parallel_data3 <- parallel_data2
-
+glimpse(parallel_data3)
 # because I kept the order this could work
 # NO NA -> here I add brachets for clarity for n ()
 parallel_data3$Origin <- fct_recode(parallel_data3$Origin, 
                                  "Human\n(2405)" = "Human", 
-                                  "Non Human\n(1013)" = "Non Human")
+                                  "Non\nHuman\n(1013)" = "Non Human")
 
 parallel_data3$eae<- fct_recode(parallel_data3$eae,
-                                "Present\n(1821)" = "Present",
-                                "Abscent\n(1597)" = "Abscent")
+                                "eae+\n(1821)" = "Present",
+                                "eae-\n(1597)" = "Abscent")
 
 # Here there is  NA 
 parallel_data3$stx<- fct_recode(parallel_data3$stx,
                                 "stx1\n(850)"    = "stx1",
                                 "stx2\n(1755)"   = "stx2", 
-                                "stx1\nstx2\n(791)"   = "stx1\nstx2",
+                                "stx1;\nstx2\n(791)"   = "stx1\nstx2",
                                 "NA\n(22)"  = NA_character_)
 
 # last no NA 
@@ -744,26 +746,49 @@ levels(parallel_data3$SeroTypeOH)
 # now dropping unused factors 
 parallel_data3 <- 
   parallel_data3 %>%
+  arrange(Source, Origin,, eae, stx, SeroTypeOH) %>%
+  rename(`SeroTypeO:H` = SeroTypeOH) %>%
   mutate(across(where(is.factor), fct_drop))
+  
 
-View(parallel_data3)
+#View(parallel_data3)
+str(parallel_data3)
+
 ```
 
 ### Long format data for final 
 
 ```{r}
+levels(interaction(parallel_data3$Source, parallel_data3$stx))
+
 parallel_data_long3 <- 
   parallel_data3 %>%
+  arrange(
+    factor(interaction(Source, stx), 
+           levels = c("Human.stx1\n(850)", "Human.stx2\n(1755)","Human.stx1;\nstx2\n(791)", 
+                      "Non Human.stx1\n(850)", "Non Human.stx2\n(1755)", "Non Human.stx1;\nstx2\n(791)",
+                      "Human.NA\n(22)",  "Non Human.NA\n(22)")
+           ))%>%
   # so all the columns we want to show in alluvial need to be in long format
   # But not the fill which is source
   to_lodes_form(key = "Types",
-                axes = c("Origin", "eae", "stx", "SeroTypeOH"),
+                axes = c("Origin", "eae", "stx", "SeroTypeO:H"),
                 value = "stratum",
                 id = "alluvium") 
 ```
 
 
-### Final Plot
+
+I do not think I can optimize the flow 
+https://stackoverflow.com/questions/72676582/confluencing-merging-flows-in-ggalluvial
+would need to recode everything  eg. 
+https://stackoverflow.com/questions/62365650/r-question-how-to-mimic-this-graph-to-show-the-percent-change-of-cells-in-healt/62372948#62372948
+https://heads0rtai1s.github.io/2019/06/06/visuals-alluvial-ggalluvial/
+
+But maybe I can in I am doing myself the long format table 
+
+
+### Final Plot1
 
 ```{r}
 # to be able to resize the text we need to go to long format
@@ -779,7 +804,7 @@ global_parallel_plot3 <-
              stratum = stratum, 
              alluvium = alluvium,
              label = stratum)) +
-  geom_alluvium(aes(fill = Source)) +
+  geom_alluvium(aes(fill = Source), aes.bind = TRUE) +
   #geom_stratum(width = 1/2) +
   geom_stratum() + 
   # Need to be first
@@ -800,6 +825,10 @@ global_parallel_plot3 <-
 global_parallel_plot3
 
 ```
+
+
+
+
 
 ###  Export the final plot 
 
