@@ -25,3 +25,32 @@ summary_by_day %>%
   scroll_box(width = "100%", height = "600px")
 ```
 --> 
+  
+  
+  
+  # 
+  # ggplot(aes(x=Country, fill=`Source Group`)) + 
+  # geom_bar(aes(y = (..count..))) +
+  # geom_text(aes(y = (..count..),label = (..count..)), 
+  #           stat = "count", 
+  #           check_overlap = FALSE, 
+  #           position = position_stack(vjust = 0.5)
+  #           ) 
+  
+  # There is some problem in order of labels   
+  # https://stackoverflow.com/questions/40775947/ggplot2-geom-text-and-order
+  # Now with GG repel
+  # data %>%
+  #   ggplot(aes(x=Country, fill=`Source Group`)) + 
+  #   #geom_bar(position="stack", stat="count") +
+  #   geom_bar(aes(y = (..count..))) +
+  #   geom_text_repel(
+  #     aes(y = (..count..), label = (..count..)),
+  #     stat = "count",
+  #     position = position_stack(vjust = 0.5),
+  #     min.segment.length = 0, # Adjust as needed to control segment length
+  #     box.padding = 0.25,      # Adjust padding around text
+  #     point.padding = 0.25,     # Adjust padding around points (if any)
+  #     direction = "y"         # Important for vertical repulsion
+  #   ) +
+  # 

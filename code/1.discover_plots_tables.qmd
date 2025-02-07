@@ -39,7 +39,9 @@ library(ggrepel)
 library(gt)
 library(webshot2)
 library(forcats)
-
+library(patchwork)
+library(RColorBrewer)
+#library(viridis)
 #library(janitor)
 #library(gtExtras)
 #library(gtsummary)
@@ -860,7 +862,8 @@ global_parallel_plot3 <-
   # need to be second
     geom_fit_text(
         stat = "stratum", min.size = 4) +
-  geom_flow(aes(fill = Source) + 
+  geom_flow(aes(fill = Source)) + 
+  #scale_fill_brewer(palette = "Spectral") +
   ggtitle("Percentage of isolates belonging to the classicaly typing systems") + 
   theme_minimal() 
 
@@ -881,16 +884,246 @@ ggsave(filename = here::here("results", "global_parallel_plot3.png"),
 ```
 
 
+### Non typeable 
+
+```{r}
+low_cov <- 
+  data %>%
+  select(Avg.Scaffold.coverage, stx.subtype, Serotype.O, Serotype.H,  MLST, Number.cgMLST.loci) %>%
+  arrange(Avg.Scaffold.coverage) %>%
+  mutate(stx_NT = ifelse(is.na(stx.subtype), "Non Typeable", "Typed"),
+         O_NT = ifelse(Serotype.O == "ONT", "Non Typeable", "Typed"), 
+         H_NT = ifelse(Serotype.H == "HNT", "Non Typeable", "Typed"), 
+         MLST_NT = ifelse(Serotype.O == "ND", "Non Typeable", "Typed")
+         ) 
+head(low_cov)
+
+
+low_cov_long <-
+  low_cov %>%
+  pivot_longer(
+    cols = c(stx_NT, O_NT, H_NT,  MLST_NT),
+    names_to = "Typing Method", 
+    values_to = "Typeable"
+    )
+
+```
+
+
+```{r}
+plot_cov1 <- low_cov_long %>%
+  ggplot(aes(x = Typeable,  Avg.Scaffold.coverage, fill = `Typing Method`)) +
+  geom_boxplot() +
+  theme_bw()
+plot_cov1 
+
+plot_cov2 <- 
+  low_cov_long %>%
+  ggplot(aes(x = Typeable,  Avg.Scaffold.coverage, fill = `Typing Method`)) +
+  geom_boxplot() +
+  ylim(c(0,30)) +
+  theme_bw()
+
+plot_cov2
+
+
+avge_cov_plot <- 
+  plot_cov1 + plot_cov2 +
+  plot_annotation(
+    title = "Average Scaffold coverage and Typing success") + 
+  plot_layout(guides = "collect")
+
+
+ggsave(filename = here::here("results", "avge_cov_plot.png"),
+       plot = avge_cov_plot,
+       dpi = 300,
+       units = "cm",
+       bg = "white",
+       width = 30, height = 10) 
+
+```
+
+# Plot : Country + source group + number of isolates 
+
+
+```{r}
+# That is for better aesthetics
+data <- 
+  data %>% 
+  mutate(`Source Group` = case_when(
+    Source.Group == "Wild_animals"~ "Wild animals",
+    Source.Group == "Zoo_animals" ~ "Zoo animals",
+    Source.Group == "Fruit_vegetables" ~ "Fruit vegetables",
+    TRUE ~ Source.Group)) 
+glimpse(data)
+# To have the counts it needs to be precalculated 
+
+
+# need to get the order correctly 
+country_order <- 
+  data %>%
+  count(Country) %>%
+  arrange(desc(n)) %>%
+  pull(Country)
+
+groups_order <- 
+  data %>%
+  count(`Source Group`) %>%
+  arrange(n) %>%
+  pull(`Source Group`)
+
+
+Country_count  <- 
+  data %>%
+  mutate(Country = factor(Country, levels = country_order, ordered = T),
+         `Source Group` = factor(`Source Group`, levels = groups_order, ordered = T)) %>%
+  count(Country, `Source Group`) 
+
+glimpse(Country_count)
+groups_order
+
+Country_Origin_plot <- 
+  ggplot(Country_count, aes(x = Country, fill = `Source Group`, y = n)) + # Use pre-calculated n
+  geom_bar(stat = "identity") +  # Important: Use stat = "identity"
+  geom_text_repel(
+    aes(label = n),
+    stat = "identity",      # Important: Use stat = "identity"
+    position = position_stack(vjust = 0.5),
+    min.segment.length = 0,
+    box.padding = 0.25,
+    point.padding = 0.25,
+    # direction = "y",
+    force = 0.01,
+    segment.color = "grey50",  # Color of the segment
+    segment.size = 0.5,       # Thickness of the segment
+    size = 3
+  ) + 
+  #scale_fill_viridis_d(option = "E") +
+  scale_fill_brewer(palette = "Spectral") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust= 0.5)) 
+  
+ #display.brewer.all()
+Country_Origin_plot
+
+scaling <- 3
+ggsave(filename = here::here("results", "Country_Origin_plot.png"),
+       plot = Country_Origin_plot,
+       dpi = 100*scaling,
+       units = "px",
+       bg = "white",
+       width = 1920*scaling, height = 1211*scaling) 
+
+```
+
+
+
+# Plot Human data + disease plot (barplot with disease) 
+- `fill per country? 
+
+
+```{r}
+human_data <- 
+  data %>%
+  filter(`Source Group` == "Human") %>%
+  select(Disease := "Disease..only.human.isolates." , Country) 
+  
+disease_order <- 
+  human_data %>%
+  count(Disease) %>%
+  arrange(desc(n)) %>%
+  pull(Disease) 
+  
+# just to have same labelling to make comparisons easier ? 
+country_order2 <- 
+  human_data %>%
+  count(Country) %>%
+  arrange(n) %>%
+  pull(Country) 
+
+# Here aim is to try to keep contries in same order
+human_data2 <- 
+  human_data %>% 
+  mutate(Country = factor(Country, levels = country_order2, ordered = T),
+         Disease = factor(Disease, levels = disease_order, ordered = T)) %>%
+  count(Disease, Country) %>%
+  arrange(Disease, Country)
+  
+
+# Test 
+disease_country_plot <- 
+  ggplot(human_data2, aes(x = Disease, fill = Country, y = n)) + # Use pre-calculated n
+  geom_bar(stat = "identity") +  # Important: Use stat = "identity"
+  geom_text_repel(
+    aes(label = n),
+    stat = "identity",      # Important: Use stat = "identity"
+    position = position_stack(vjust = 0.5),
+    min.segment.length = 0,
+    box.padding = 0.25,
+    point.padding = 0.25,
+    # direction = "y",
+    force = 0.01,
+    segment.color = "grey50",  # Color of the segment
+    segment.size = 0.5,       # Thickness of the segment
+    size = 3
+  ) + 
+  scale_fill_brewer(palette = "Spectral") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust= 0.5)) 
+  
+ #display.brewer.all()
+
+scaling <- 3
+ggsave(filename = here::here("results", "disease_country_plot.png"),
+       plot = disease_country_plot,
+       dpi = 100*scaling,
+       units = "px",
+       bg = "white",
+       width = 1920*scaling, height = 1211*scaling) 
+
+
+```
 
 
 # Output data for Camilla 
 
 ```{r}
 dim(data)
+
 data %>%
-  # remove genes with 0 
-  select(!remove_AMR) %>%
-  
+  # Remove - only reformated for pretty plot
+  select(-`Source Group`) %>%
+  # Suggested order for reorganizing column orders
+  # Source" is cleaned Human Non human , "stx.subtype" is stx1, stx2 ... I used for plots
+  # Removed AliasID only NA
+  select("Accession.Number", "Isolate.ID", 
+         "Country", "Institute",
+         "Year.Isolation", 
+         "Source", "Source.Group", "Source.Subgroup", "Source.Comment", 
+         "Age.group..only.human.isolates.", "Disease..only.human.isolates.", "Import..only.non.human.isolates.", 
+         "Sample.Type", 
+         "Avg.Scaffold.coverage", "Burst.size", 
+         "Number.cgMLST.loci", "MLST", 
+         "stx.subtype", "stx.subtype_detail", "stx.other.method", 
+         "Serotype.O", "Serotype.H", "SerotypeOH", 
+         "AMR.genes", 
+         "Species", "Gene", "Count.contaminants", 
+         "eae", 
+         "asta", "agg3a", "cif", "espj", "toxb", "lpfa", "agg3d", "katp", 
+         "espa", "ltca", "cnf1", "espc", "espb", "aata", "stx1a", "tir", 
+         "cdtb", "iss", "espf", "tsh", "espp", "sfas", "k88ab", "bfpa", 
+         "efa1", "capu", "eila", "pic", "cma", "vat", "siga", "aar", "stx2a", 
+         "ehxa", "mchb", "senb", "iha", "stx2b", "fim41a", "etpd", "mcma", 
+         "nleb", "nlea", "sat", "feda", "iron", "suba", "pet", "pera", 
+         "air", "agg3c", "aaic", "eae.y", "epea", "gad", "sepa", "fedf", 
+         "aap", "orf4", "aggr", "f17a", "nlec", "orf3", "cba", "stb", 
+         "mchc", "sta1", "agg3b", "mchf", "stx1b", "f17g", "celb", "espi", 
+         "irea") %>%
+    write.table(., 
+                here("results", "2025-02-07_reordered_data.tsv"),
+            sep = "\t", 
+            col.names = T, row.names = F,
+            quote = F)
 ```
 
 
