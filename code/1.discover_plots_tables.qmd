@@ -1126,4 +1126,7 @@ data %>%
             quote = F)
 ```
 
+- sat, pet, pera   genes -> seens only O and NA -> it should not be
+so I have to review the cleaning of the genes before export
+
 
