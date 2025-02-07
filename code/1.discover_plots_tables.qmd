@@ -76,7 +76,8 @@ data <-
   # pathogenecity island re-encoding
   mutate(eae = if_else(eae.y =="0", "Abscent", "Present")) %>%
   # rename col - homogeneity
-  rename(SeroType.H = Serotype.H)
+  rename(Serotype.O = SeroType.O, SerotypeOH := O_H_combined_serotype, 
+         stx.other.method =`stx_subtypes identified by other methods`)
 
 # add here if other things detected and rerun
   
@@ -94,8 +95,8 @@ selected_data <-
          Disease := `Disease..only.human.isolates.`,
          MLST, 
          stx.subtype, stx.subtype_detail,
-         stx.other.method :=`stx_subtypes identified by other methods`,
-         Serotype.O := SeroType.O, SeroType.H, SeroTypeOH := O_H_combined_serotype, eae, eae.y,
+         stx.other.method,
+         Serotype.O, Serotype.H, SerotypeOH, eae, eae.y,
          AMR.genes,
          Source, 
          Source.Subgroup, Year.Isolation, Institute, Isolate.ID,
@@ -131,14 +132,14 @@ summary_table <-
   selected_data %>% 
   my_summary_fun()  
 
-View(summary_table)
+#View(summary_table)
 ```
 
 ### Previous data check for info
 > not needed anymore 
 
 <!-- 
-## Data control helpers
+## Data control helpers - previous, now its not actual
 ```{r}
 selected_data %>%
   select(MLST) %>%
@@ -221,7 +222,7 @@ selected_data %>%
 write.table(selected_data %>% 
               select( -n ) %>%
               my_summary_fun(),
-            here("results", "2025-02-06_summary_table_col.tsv"),
+            here("results", "2025-02-07_summary_table_col.tsv"),
             sep = "\t", 
             col.names = T, row.names = F,
             quote = F)
@@ -247,7 +248,7 @@ list_gene_fine <-c('asta', 'ipad', 'saa', 'agg3a', 'cif', 'espj', 'toxb', 'aggd'
 length(list_gene_fine)
 
 setdiff(list_gene_fine, list_gene_data)
-
+# ok eae is not a problem
 ```
 
 102 genes consistent between reports AMR and list in script for the pipeline. 
@@ -359,7 +360,7 @@ stx_all
 Export Complete Shiga 
 ```{r}
 write.table(stx_all,
-            here("results", "2025-02-06_stx_all.tsv"),
+            here("results", "2025-02-07_stx_all.tsv"),
             sep = "\t", 
             col.names = T, row.names = F,
             quote = F)
@@ -499,7 +500,7 @@ Now I used ggalluvial
 ```{r}
 parallel_data1 <- 
   data %>%
-  select(Source, eae, stx := stx.subtype, SeroTypeOH := O_H_combined_serotype, n) %>%
+  select(Source, eae, stx := stx.subtype, SerotypeOH, n) %>%
   # reformating for better display
   mutate(Source = str_replace(Source, "Non human", "Non\nHuman")) %>%
   mutate(stx = str_remove_all(stx, " ")) %>%
@@ -508,9 +509,9 @@ parallel_data1 <-
   # We need this column twice (under different names)
   mutate(Origin  = Source) %>%
   # trying to order to make the graph a bit clearer
-  arrange(Source, eae, stx, SeroTypeOH) 
+  arrange(Source, eae, stx, SerotypeOH) 
 
-glimpse(parallel_data)
+glimpse(parallel_data1)
 ```
 
 data check 
@@ -535,10 +536,10 @@ parallel_data_long1 <-
   # so all the columns we want to show in alluvial need to be in long format
   # But not the fill which is source
   to_lodes_form(key = "col",
-                axes = c("Origin", "eae", "stx", "SeroTypeOH"),
+                axes = c("Origin", "eae", "stx", "SerotypeOH"),
                 value = "stratum",
                 id = "alluvium") 
-# head(parallel_data_long1)
+head(parallel_data_long1)
 # View(parallel_data_long1)
 ```
 
@@ -558,7 +559,7 @@ global_parallel_plot1 <-
   geom_stratum() + 
   # Need to be first
   ggrepel::geom_text_repel(
-    data = parallel_data_long %>%
+    data = parallel_data_long1 %>%
       filter(col == "stx" & is.na(stratum)), 
     aes(label = "NA"),
     stat = "stratum", size = 3, direction = "y", nudge_x = -.5) +
@@ -595,17 +596,17 @@ stx_levels <- c("stx1", "stx2", "stx1\nstx2", NA)
 
 sero_count <- 
   parallel_data1 %>%
-  select(SeroTypeOH, n) %>%
-  group_by(SeroTypeOH) %>%
+  select(SerotypeOH, n) %>%
+  group_by(SerotypeOH) %>%
   summarise(sero_sum := sum(n), .groups = "keep") %>%
   arrange(desc(sero_sum)) %>%
-  mutate(sero_transfo = if_else(sero_sum >= 50, SeroTypeOH, "Other"))
+  mutate(sero_transfo = if_else(sero_sum >= 50, SerotypeOH, "Other"))
 
 # those are those to group as Other
 sero_other <- 
   sero_count %>% 
     filter(sero_transfo == "Other") %>%
-    pull(SeroTypeOH)
+    pull(SerotypeOH)
 
 length(sero_other)
 dput(sero_other)
@@ -615,11 +616,11 @@ dput(sero_other)
 sero_levels <- 
   sero_count %>%
   filter(sero_transfo != "Other") %>%
-  pull(SeroTypeOH)
+  pull(SerotypeOH)
 
 sero_levels <- c(sero_levels, "Other", NA)
 
-length(sero_levels) # 9 + Other should be ok
+length(sero_levels) #10 + Other should be ok
 ```
 
 Now I can get the data set with the groups and ordered levels 
@@ -629,13 +630,13 @@ Now I can get the data set with the groups and ordered levels
 parallel_data2 <- 
   parallel_data1 %>%
   # Needs to be done first - because otherwise levels will not be changed
-  mutate(SeroTypeOH  = if_else(SeroTypeOH %in% sero_other, "Other", SeroTypeOH)) %>%
+  mutate(SerotypeOH  = if_else(SerotypeOH %in% sero_other, "Other", SerotypeOH)) %>%
   # it needs to be Origin that is ordered - its the one used in the stash for plot
   # remove does not help : Source = factor(Source, levels = source_levels, ordered = T, exclude = NULL),
   mutate(Origin = factor(Source, levels = source_levels, ordered = T, exclude = NULL),
          eae = factor(eae, levels = eae_levels, ordered = T, exclude = NULL),
          stx = factor(stx, levels = stx_levels, ordered = T, exclude = NULL),
-         SeroTypeOH = factor(SeroTypeOH, levels = sero_levels, ordered = T, exclude = NULL)
+         SerotypeOH = factor(SerotypeOH, levels = sero_levels, ordered = T, exclude = NULL)
          )
 
 glimpse(parallel_data2)
@@ -688,7 +689,7 @@ stx_levels
 #OH levels for those grouped
 count_OH <- 
   parallel_data2 %>%
-  group_by(SeroTypeOH) %>%
+  group_by(SerotypeOH) %>%
   summarise(sum_OH = sum(n)) %>%
   pull(sum_OH)
 count_OH
@@ -711,10 +712,11 @@ parallel_data3 <- parallel_data2
 glimpse(parallel_data3)
 # because I kept the order this could work
 # NO NA -> here I add brachets for clarity for n ()
+levels(parallel_data3$Origin)
 parallel_data3$Origin <- fct_recode(parallel_data3$Origin, 
                                  "Human\n(2405)" = "Human", 
                                   "Non\nHuman\n(1013)" = "Non Human")
-
+levels(parallel_data3$Origin)
 parallel_data3$eae<- fct_recode(parallel_data3$eae,
                                 "eae+\n(1821)" = "Present",
                                 "eae-\n(1597)" = "Abscent")
@@ -728,26 +730,26 @@ parallel_data3$stx<- fct_recode(parallel_data3$stx,
 
 # last no NA 
 sero_levels
-parallel_data3$SeroTypeOH<- fct_recode(parallel_data3$SeroTypeOH, 
+parallel_data3$SerotypeOH<- fct_recode(parallel_data3$SerotypeOH, 
                                        "O157:H7\n(785)" = "O157:H7",
                                        "O26:H11\n(419)" = "O26:H11",
                                        "O146:H21\n(154)"= "O146:H21",
                                        "O103:H2\n(149)" = "O103:H2",
                                        "O91:H14\n(130)" = "O91:H14",
-                                       "O128ab:H2\n(105)" = "O128ab:H2",
-                                       "O111:H8\n(73)" = "O111:H8",
-                                       "O146:H28\n(66)"= "O146:H28",
-                                       "O145:HNT\n(54)"= "O145:HNT",
+                                       "O128ab:H2 (105)" = "O128ab:H2",
+                                       "O111:H8 (73)" = "O111:H8",
+                                       "O146:H28 (66)"= "O146:H28",
+                                       "O145:HNT (54)"= "O145:HNT",
                                        "Other\n(1483)" = "Other"
                                        )
 
 
-levels(parallel_data3$SeroTypeOH)
+levels(parallel_data3$SerotypeOH)
 # now dropping unused factors 
 parallel_data3 <- 
   parallel_data3 %>%
-  arrange(Origin, eae, stx, SeroTypeOH) %>%
-  rename(`SeroTypeO:H` = SeroTypeOH) %>%
+  arrange(Origin, eae, stx, SerotypeOH) %>%
+  rename(`SerotypeO:H` = SerotypeOH) %>%
   mutate(across(where(is.factor), fct_drop))
   
 
@@ -776,7 +778,7 @@ parallel_data_long3 <-
   # so all the columns we want to show in alluvial need to be in long format
   # But not the fill which is source
   to_lodes_form(key = "Types",
-                axes = c("Origin", "eae", "stx", "SeroTypeO:H"),
+                axes = c("Origin", "eae", "stx", "SerotypeO:H"),
                 value = "stratum",
                 id = "alluvium") 
   
@@ -836,8 +838,10 @@ Test reorganisation
 
 https://corybrunson.github.io/ggalluvial/reference/stat_flow.html
 
-- This is the best and most logical one I think
+NB : using those options earlier might have avoided all the definition of factors (eg. most abundant on top) but that was already done
+Will know for next time
 
+- This is the best and most logical one I think
 
 ```{r}
 global_parallel_plot3 <- 
@@ -852,11 +856,11 @@ global_parallel_plot3 <-
     data = parallel_data_long3 %>%
       filter(Types == "stx" & (stratum == "NA\n(22)")), 
     aes(label = "NA (22)"),
-    stat = "stratum", size = 3, direction = "y", nudge_x = -.5) +
+    stat = "stratum", size = 4, direction = "y", nudge_x = -.5) +
   # need to be second
-   geom_fit_text(
-       stat = "stratum", min.size = 1) +
-  geom_flow(aes(fill = Source), aes.bind = TRUE) + 
+    geom_fit_text(
+        stat = "stratum", min.size = 4) +
+  geom_flow(aes(fill = Source) + 
   ggtitle("Percentage of isolates belonging to the classicaly typing systems") + 
   theme_minimal() 
 
@@ -867,12 +871,16 @@ global_parallel_plot3
 ###  Export the final plot 
 
 ```{r}
+scaling <- 3
 ggsave(filename = here::here("results", "global_parallel_plot3.png"),
        plot = global_parallel_plot3,
-       dpi = 300,
-       units = "cm",
-       width = 30, height = 10) 
+       dpi = 100*scaling,
+       units = "px",
+       bg = "white",
+       width = 1920*scaling, height = 1211*scaling) 
 ```
+
+
 
 
 # Output data for Camilla 
