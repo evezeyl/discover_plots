@@ -1131,36 +1131,60 @@ ggsave(filename = here::here("results", "2025-02-10_disease_country_plot.png"),
 
 ```{r}
 dim(data)
+ordered_amr_names <- sort(names(data)[26:99])
 
-data %>%
+data <- 
+  data %>%
   # Remove - only reformated for pretty plot
   select(-`Source Group`) %>%
   # Suggested order for reorganizing column orders
   # Source" is cleaned Human Non human , "stx.subtype" is stx1, stx2 ... I used for plots
   # Removed AliasID only NA
-  select("Accession.Number", "Isolate.ID", 
+  select(Accession.Number, Isolate.ID,
          "Country", "Institute",
-         "Year.Isolation", 
-         "Source", "Source.Group", "Source.Subgroup", "Source.Comment", 
-         "Age.group..only.human.isolates.", "Disease..only.human.isolates.", "Import..only.non.human.isolates.", 
-         "Sample.Type", 
-         "Avg.Scaffold.coverage", "Burst.size", 
-         "Number.cgMLST.loci", "MLST", 
-         "stx.subtype", "stx.subtype_detail", "stx.other.method", 
-         "Serotype.O", "Serotype.H", "SerotypeOH", 
-         "AMR.genes", 
-         "Species", "Gene", "Count.contaminants", 
-         "eae", 
-         "asta", "agg3a", "cif", "espj", "toxb", "lpfa", "agg3d", "katp", 
-         "espa", "ltca", "cnf1", "espc", "espb", "aata", "stx1a", "tir", 
-         "cdtb", "iss", "espf", "tsh", "espp", "sfas", "k88ab", "bfpa", 
-         "efa1", "capu", "eila", "pic", "cma", "vat", "siga", "aar", "stx2a", 
-         "ehxa", "mchb", "senb", "iha", "stx2b", "fim41a", "etpd", "mcma", 
-         "nleb", "nlea", "sat", "feda", "iron", "suba", "pet", "pera", 
-         "air", "agg3c", "aaic", "eae.y", "epea", "gad", "sepa", "fedf", 
-         "aap", "orf4", "aggr", "f17a", "nlec", "orf3", "cba", "stb", 
-         "mchc", "sta1", "agg3b", "mchf", "stx1b", "f17g", "celb", "espi", 
-         "irea") %>%
+         "Year.Isolation",
+         "Source", "Source.Group", "Source.Subgroup", "Source.Comment",
+         "Age.group..only.human.isolates.", "Disease..only.human.isolates." := Disease,
+         "Import..only.non.human.isolates.", 
+         "Sample.Type",
+         "Avg.Scaffold.coverage", "Burst.size",
+         Number.cgMLST.loci, MLST,
+         Presence_stx, stx.subtype, stx.other.method, Presence_eae,
+         Serotype.O, Serotype.H, SerotypeOH,
+         Species, Gene, Count.contaminants, AMR.genes,
+         ordered_amr_names) 
+
+data <- 
+  data %>%
+  mutate_at(vars(`Import..only.non.human.isolates.`), ~ if_else(. == "Unknown", NA_character_, . ))
+
+str(data)
+
+unique(data$`Disease..only.human.isolates.`)
+unique(data$`Import..only.non.human.isolates.`)
+  # select("Accession.Number", "Isolate.ID", 
+  #        "Country", "Institute",
+  #        "Year.Isolation", 
+  #        "Source", "Source.Group", "Source.Subgroup", "Source.Comment", 
+  #        "Age.group..only.human.isolates.", "Disease..only.human.isolates.", "Import..only.non.human.isolates.", 
+  #        "Sample.Type", 
+  #        "Avg.Scaffold.coverage", "Burst.size", 
+  #        "Number.cgMLST.loci", "MLST", 
+  #        "stx.subtype", "stx.subtype_detail", "stx.other.method", 
+  #        "Serotype.O", "Serotype.H", "SerotypeOH", 
+  #        "AMR.genes", 
+  #        "Species", "Gene", "Count.contaminants", 
+  #        "eae", 
+  #        "asta", "agg3a", "cif", "espj", "toxb", "lpfa", "agg3d", "katp", 
+  #        "espa", "ltca", "cnf1", "espc", "espb", "aata", "stx1a", "tir", 
+  #        "cdtb", "iss", "espf", "tsh", "espp", "sfas", "k88ab", "bfpa", 
+  #        "efa1", "capu", "eila", "pic", "cma", "vat", "siga", "aar", "stx2a", 
+  #        "ehxa", "mchb", "senb", "iha", "stx2b", "fim41a", "etpd", "mcma", 
+  #        "nleb", "nlea", "sat", "feda", "iron", "suba", "pet", "pera", 
+  #        "air", "agg3c", "aaic", "eae.y", "epea", "gad", "sepa", "fedf", 
+  #        "aap", "orf4", "aggr", "f17a", "nlec", "orf3", "cba", "stb", 
+  #        "mchc", "sta1", "agg3b", "mchf", "stx1b", "f17g", "celb", "espi", 
+  #        "irea") %>%
     write.table(., 
                 here("results", "2025-02-07_reordered_data.tsv"),
             sep = "\t", 
