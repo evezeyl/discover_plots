@@ -272,7 +272,7 @@ list_gene_fine <-c('asta', 'ipad', 'saa', 'agg3a', 'cif', 'espj', 'toxb', 'aggd'
 length(list_gene_fine)
 
 setdiff(list_gene_fine, list_gene_data)
-setdiff(list_gene_data, list_gene_fin
+setdiff(list_gene_data, list_gene_fine)
 ```
 
 102 genes consistent between reports AMR and list in script for the pipeline. 
@@ -428,7 +428,7 @@ stx_compact <-
 
 stx_compact %>% View()
 
-
+dput(sort(unique(stx_compact$stx.subtype)))
 
 # dput(sort(unique(stx_compact$stx.subtype)))  
 stx_sub_levels <- 
@@ -517,7 +517,7 @@ stx_gt_table
 ## Export
 
 ```{r}
-gtsave(stx_gt_table, "2025-01-10_stx_gt_table.png", here::here("results"))
+gtsave(stx_gt_table, "2025-02-10_stx_gt_table.png", here::here("results"))
 ```
 
 # Parallel sets (Sankey like) plots (I want adding to 100 %)
@@ -532,7 +532,7 @@ parallel_data1 <-
   # reformating for better display
   mutate(Source = str_replace(Source, "Non human", "Non\nHuman")) %>%
   mutate(stx = str_remove_all(stx, " ")) %>%
-  mutate(stx = str_replace(stx, ";", "\n")) %>%
+  mutate(stx = str_replace_all(stx, ";", "\n")) %>%
   mutate(`%` = n / sum(n) * 100) %>%
   # We need this column twice (under different names)
   mutate(Origin  = Source) %>%
@@ -614,10 +614,13 @@ global_parallel_plot1
 ## Preparing for final plotting - order and grouping some variables 
 
 ```{r}
-dput(unique(unique(parallel_data1$stx)))
+dput(unique(unique(parallel_data1$stx))
+#c("stx1", "stx1\nstx2", "stx2", NA)
 dput(unique(unique(parallel_data1$eae)))
+#c("Abscent", "Present")
 
-
+# We consider cases where NA are possible
+# Levels are ordered
 source_levels <- c(unique(parallel_data1$Source), NA)
 eae_levels <- c("Present", "Abscent", NA)
 stx_levels <- c("stx1", "stx2", "stx1\nstx2", NA)
@@ -630,15 +633,14 @@ sero_count <-
   arrange(desc(sero_sum)) %>%
   mutate(sero_transfo = if_else(sero_sum >= 50, SerotypeOH, "Other"))
 
+
 # those are those to group as Other
 sero_other <- 
   sero_count %>% 
     filter(sero_transfo == "Other") %>%
     pull(SerotypeOH)
 
-length(sero_other)
-dput(sero_other)
-
+length(sero_other) # 237 
 
 # order levels
 sero_levels <- 
@@ -648,12 +650,13 @@ sero_levels <-
 
 sero_levels <- c(sero_levels, "Other", NA)
 
-length(sero_levels) #10 + Other should be ok
+length(sero_levels) #10 + 1  Other should be ok
 ```
 
 Now I can get the data set with the groups and ordered levels 
 
 ! HERE we do not want to drop NA levels
+
 ```{r}
 parallel_data2 <- 
   parallel_data1 %>%
@@ -668,6 +671,7 @@ parallel_data2 <-
          )
 
 glimpse(parallel_data2)
+str(parallel_data2)
 #parallel_data2 %>% View()
 ```
 
@@ -681,50 +685,43 @@ so its better to modify here
 ! IF NA count is not 0 - needs to be modified 
 
 ```{r}
+# Improving way to set levels to avoid errors
 count_origin <- 
   parallel_data2 %>%
   group_by(Origin) %>%
-  summarise(sum_Origin = sum(n)) %>%
-  pull(sum_Origin)
-count_origin
-# NA count is O
-source_levels
-source_levels <- paste(source_levels, c(count_origin, 0), sep = "\n")
+  summarise(sum_Origin = sum(n)) 
+  
+source_levels <- paste(count_origin$Origin, count_origin$sum_Origin,  sep = "\n")
 source_levels
 
 count_eae <- 
   parallel_data2 %>%
   group_by(eae) %>%
-  summarise(sum_eae = sum(n)) %>%
-  pull(sum_eae)
+  summarise(sum_eae = sum(n)) 
 count_eae
 
-eae_levels
-eae_levels <- paste(eae_levels, c(count_eae,0), sep = "\n")
+eae_levels <- paste(count_eae$eae, count_eae$sum_eae, sep = "\n")
 eae_levels
 
 count_stx <- 
   parallel_data2 %>%
   group_by(stx) %>%
-  summarise(sum_stx = sum(n)) %>%
-  pull(sum_stx)
+  summarise(sum_stx = sum(n)) 
+
 count_stx
-# here there is NA that is counted
-stx_levels
-stx_levels <- paste(stx_levels, count_stx, sep = "\n")
+
+
+stx_levels <- paste(count_stx$stx, count_stx$sum_stx, sep = "\n")
 stx_levels
 
 #OH levels for those grouped
 count_OH <- 
   parallel_data2 %>%
   group_by(SerotypeOH) %>%
-  summarise(sum_OH = sum(n)) %>%
-  pull(sum_OH)
-count_OH
+  summarise(sum_OH = sum(n)) 
+count_OH 
 
-# Here there is no NA 
-sero_levels
-sero_levels <- paste(sero_levels, c(count_OH,0), sep = "\n")
+sero_levels <- paste(count_OH$SerotypeOH, count_OH$sum_OH, sep = "\n")
 sero_levels
 ```
 
@@ -744,7 +741,6 @@ levels(parallel_data3$Origin)
 parallel_data3$Origin <- fct_recode(parallel_data3$Origin, 
                                  "Human\n(2405)" = "Human", 
                                   "Non\nHuman\n(1013)" = "Non Human")
-levels(parallel_data3$Origin)
 parallel_data3$eae<- fct_recode(parallel_data3$eae,
                                 "eae+\n(1821)" = "Present",
                                 "eae-\n(1597)" = "Abscent")
@@ -772,11 +768,18 @@ parallel_data3$SerotypeOH<- fct_recode(parallel_data3$SerotypeOH,
                                        )
 
 
+
+
+# This part should have been done better ...
 levels(parallel_data3$SerotypeOH)
+```
+
+
+```{r}
 # now dropping unused factors 
 parallel_data3 <- 
   parallel_data3 %>%
-  arrange(Origin, eae, stx, SerotypeOH) %>%
+  #arrange(Origin, eae, stx, SerotypeOH) %>%
   rename(`SerotypeO:H` = SerotypeOH) %>%
   mutate(across(where(is.factor), fct_drop))
   
@@ -790,29 +793,14 @@ levels((parallel_data3$Origin))
 ### Long format data for final 
 
 ```{r}
-levels(interaction(parallel_data3$Source, parallel_data3$stx))
-
 parallel_data_long3 <- 
   parallel_data3 %>%
   # this did not work 
-  # arrange(
-  #   factor(interaction(Source, stx), 
-  #          levels = c("Human.stx1\n(850)", "Human.stx2\n(1755)","Human.stx1;\nstx2\n(791)", 
-  #                     "Non Human.stx1\n(850)", "Non Human.stx2\n(1755)", "Non Human.stx1;\nstx2\n(791)",
-  #                     "Human.NA\n(22)",  "Non Human.NA\n(22)")
-  #          ))%>%
-  #arrange()
-  
-  # so all the columns we want to show in alluvial need to be in long format
   # But not the fill which is source
   to_lodes_form(key = "Types",
                 axes = c("Origin", "eae", "stx", "SerotypeO:H"),
                 value = "stratum",
                 id = "alluvium") 
-  
-head(parallel_data_long3)  
-# so alluvium is link the individual data - what is what 
-# so I need to organize those proprely  
 ```
 
 
@@ -831,17 +819,10 @@ But maybe I can in I am doing myself the long format table
 ```{r}
 # to be able to resize the text we need to go to long format
 parallel_data_long3 %>%
-  # mutate(text_size = case_when(
-  #   col == "Origin" | col == "eae" | col == "stx" ~ 1,
-  #   col == "SeroTypeOH" ~ 1,
-  #   TRUE ~ .3)
-  #   ) %>%
-  ggplot(.,
-         aes(x = Types, y = `%`,
-             stratum = stratum, 
-             alluvium = alluvium,
-             label = stratum)) +
-  geom_alluvium(aes(fill = Source), aes.bind = "alluvia") +
+  ggplot(., aes(x = Types, y = `%`,  stratum = stratum,  alluvium = alluvium,
+                label = stratum)) +
+  # , aes.bind = "alluvia"
+  geom_alluvium(aes(fill = Source)) +
   #geom_stratum(width = 1/2) +
   geom_stratum() + 
   # Need to be first
@@ -873,13 +854,13 @@ Will know for next time
 - This is the best and most logical one I think
 
 ```{r}
-display.brewer.pal(11, "Spectral")
-brewer.pal(11, "Spectral")
+#display.brewer.pal(11, "Spectral")
+#brewer.pal(11, "Spectral")
 human_fill_pal <- c( "Human" = "#3288BD"  , "Non Human" = "#ABDDA4" ) 
 
 
 global_parallel_plot3 <- 
-  parallel_data_long3 %>%
+ parallel_data_long3 %>%
   ggplot(., aes(x = Types, y = `%`,
              stratum = stratum, 
              alluvium = alluvium,
@@ -890,18 +871,17 @@ global_parallel_plot3 <-
     data = parallel_data_long3 %>%
       filter(Types == "stx" & (stratum == "NA\n(22)")), 
     aes(label = "NA (22)"),
-    stat = "stratum", size = 4, direction = "y", nudge_x = -.5) +
+    stat = "stratum", size = 3, direction = "y", nudge_x = -.5) +
   # need to be second
-    geom_fit_text(
-        stat = "stratum", min.size = 4) +
-  geom_flow(aes(fill = Source)) + 
+   geom_fit_text(
+       stat = "stratum", min.size = 1) +
+  geom_flow(aes(fill = Source), aes.bind = TRUE) + 
   scale_fill_manual(values = human_fill_pal) +
   ggtitle("Percentage of isolates belonging to the classicaly typing systems") + 
   theme_minimal() 
 
 global_parallel_plot3
 ```
-
 
 
 ###  Export the final plot 
@@ -1158,35 +1138,9 @@ data <-
   data %>%
   mutate_at(vars(`Import..only.non.human.isolates.`), ~ if_else(. == "Unknown", NA_character_, . ))
 
-str(data)
-
-unique(data$`Disease..only.human.isolates.`)
-unique(data$`Import..only.non.human.isolates.`)
-  # select("Accession.Number", "Isolate.ID", 
-  #        "Country", "Institute",
-  #        "Year.Isolation", 
-  #        "Source", "Source.Group", "Source.Subgroup", "Source.Comment", 
-  #        "Age.group..only.human.isolates.", "Disease..only.human.isolates.", "Import..only.non.human.isolates.", 
-  #        "Sample.Type", 
-  #        "Avg.Scaffold.coverage", "Burst.size", 
-  #        "Number.cgMLST.loci", "MLST", 
-  #        "stx.subtype", "stx.subtype_detail", "stx.other.method", 
-  #        "Serotype.O", "Serotype.H", "SerotypeOH", 
-  #        "AMR.genes", 
-  #        "Species", "Gene", "Count.contaminants", 
-  #        "eae", 
-  #        "asta", "agg3a", "cif", "espj", "toxb", "lpfa", "agg3d", "katp", 
-  #        "espa", "ltca", "cnf1", "espc", "espb", "aata", "stx1a", "tir", 
-  #        "cdtb", "iss", "espf", "tsh", "espp", "sfas", "k88ab", "bfpa", 
-  #        "efa1", "capu", "eila", "pic", "cma", "vat", "siga", "aar", "stx2a", 
-  #        "ehxa", "mchb", "senb", "iha", "stx2b", "fim41a", "etpd", "mcma", 
-  #        "nleb", "nlea", "sat", "feda", "iron", "suba", "pet", "pera", 
-  #        "air", "agg3c", "aaic", "eae.y", "epea", "gad", "sepa", "fedf", 
-  #        "aap", "orf4", "aggr", "f17a", "nlec", "orf3", "cba", "stb", 
-  #        "mchc", "sta1", "agg3b", "mchf", "stx1b", "f17g", "celb", "espi", 
-  #        "irea") %>%
-    write.table(., 
-                here("results", "2025-02-07_reordered_data.tsv"),
+data %>%
+  write.table(., 
+                here("results", "2025-02-10_reordered_data.tsv"),
             sep = "\t", 
             col.names = T, row.names = F,
             quote = F)
