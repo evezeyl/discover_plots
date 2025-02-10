@@ -54,11 +54,31 @@ library(RColorBrewer)
 NOTE: The data is not clean - This is not normal (you should provide the data set with a table that can be used directly in an analysis software - so the formating should be rechecked)
 
 ```{r}
-data1 <- readxl::read_excel(here::here(params$data),
+data1 <- readxl::read_xlsx(here::here(params$data),
                            sheet = params$sheet,
-                           na = "NA")
+                           na = "NA",
+                           col_types = "text"
+                           ) 
+# is not read proprely if other column type ! 
 glimpse(data1) 
+dim(data1) # 3418 This is ok
 ```
+
+<!-- Croschecking data reading - seems some data not read proprely 
+OK now that it is read as text 
+
+```{r}
+data1 %>%
+  filter(Isolate.ID == "STEC-SSI-470"   | Isolate.ID == "654006") %>%
+  select(sat, pet, pera)
+
+
+names(data1)
+levels(as.factor(data1$pet))
+levels(as.factor(data1$sat))
+levels(as.factor(data1$pera))
+```
+-->
 
 # Data pretifying & for homogeneity for all datasets
 
@@ -68,19 +88,21 @@ data <-
   # Source added
   mutate(Source = if_else(Source.Group == "Human", Source.Group , "Non Human"),
          n = 1) %>%
-  # Additional column stx classification vs detail
-  rename(stx.subtype_detail = stx.subtype) %>%
-  mutate(stx.subtype = case_when(
-    str_detect(stx.subtype_detail, "stx1") & str_detect(stx.subtype_detail, "stx2") ~ "stx1;stx2",
-    str_detect(stx.subtype_detail, "stx1") & !str_detect(stx.subtype_detail, "stx2") ~ "stx1",
-    str_detect(stx.subtype_detail, "stx2") & !str_detect(stx.subtype_detail, "stx1") ~ "stx2",
-    TRUE ~ NA)) %>% 
-  # pathogenecity island re-encoding
-  mutate(eae = if_else(eae.y =="0", "Abscent", "Present")) %>%
-  # rename col - homogeneity
+  # rename col - homogeneity - simplicity
   rename(Serotype.O = SeroType.O, SerotypeOH := O_H_combined_serotype, 
-         stx.other.method =`stx_subtypes identified by other methods`)
-
+         stx.other.method =`stx_subtypes identified by other methods`,
+         Disease = Disease..only.human.isolates., eae = eae.y) %>%
+  # Additional column stx classification vs detail
+  mutate(Presence_stx = case_when(
+    str_detect(stx.subtype, "stx1") & str_detect(stx.subtype, "stx2") ~ "stx1;stx2",
+    str_detect(stx.subtype, "stx1") & !str_detect(stx.subtype, "stx2") ~ "stx1",
+    str_detect(stx.subtype, "stx2") & !str_detect(stx.subtype, "stx1") ~ "stx2",
+    TRUE ~ NA)) %>% 
+  
+  # pathogenecity island re-encoding
+  mutate(Presence_eae = if_else(eae =="0", "Abscent", "Present"),
+        Disease = if_else(Disease == "Unknown",  NA_character_, Disease) 
+        )
 # add here if other things detected and rerun
   
 ```
@@ -94,18 +116,18 @@ data <-
 selected_data <- 
   data %>% 
   select(Country, Source.Group, 
-         Disease := `Disease..only.human.isolates.`,
+         Disease,
          MLST, 
-         stx.subtype, stx.subtype_detail,
+         Presence_stx, stx.subtype,
          stx.other.method,
-         Serotype.O, Serotype.H, SerotypeOH, eae, eae.y,
+         Serotype.O, Serotype.H, SerotypeOH, Presence_eae, eae,
          AMR.genes,
          Source, 
          Source.Subgroup, Year.Isolation, Institute, Isolate.ID,
          n
 ) 
 glimpse(selected_data)
-View(selected_data)
+#View(selected_data)
 ```
 
 
@@ -134,7 +156,7 @@ summary_table <-
   selected_data %>% 
   my_summary_fun()  
 
-#View(summary_table)
+View(summary_table)
 ```
 
 ### Previous data check for info
@@ -224,7 +246,7 @@ selected_data %>%
 write.table(selected_data %>% 
               select( -n ) %>%
               my_summary_fun(),
-            here("results", "2025-02-07_summary_table_col.tsv"),
+            here("results", "2025-02-10_summary_table_col.tsv"),
             sep = "\t", 
             col.names = T, row.names = F,
             quote = F)
@@ -250,7 +272,7 @@ list_gene_fine <-c('asta', 'ipad', 'saa', 'agg3a', 'cif', 'espj', 'toxb', 'aggd'
 length(list_gene_fine)
 
 setdiff(list_gene_fine, list_gene_data)
-# ok eae is not a problem
+setdiff(list_gene_data, list_gene_fin
 ```
 
 102 genes consistent between reports AMR and list in script for the pipeline. 
@@ -326,8 +348,11 @@ dput(remove_AMR)
 length(remove_AMR)
 ```
 28 genes ... to be removed (cf Output data for Camilla)
-
-
+dput(remove_AMR)
+c("ipad", "saa", "aggd", "cfac", "agg4c", "tccp", "ipah9", "lnga", 
+"virf", "agg5a", "agga", "agg4d", "agg4a", "cci", "aafd", "aggc", 
+"fasa", "aafa", "nfae", "aafc", "rpea", "hlye", "fana", "aafb", 
+"eata", "aggb", "cofa", "agg4b")
 ## Update DATA remove 0 genes
 
 ```{r}
@@ -338,6 +363,20 @@ data <-
   select(!remove_AMR) 
   
 ```
+Genes with only 0 - removed 
+
+
+<!-- control that sat, pet, pera ok  -> they should not be empty
+```{r}
+glimpse(data)
+
+levels(as.factor(data$sat))
+levels(as.factor(data$pet))
+levels(as.factor(data$pera))
+```
+
+OK, now its still ok 
+--> 
 
 
 # Table FOR Shiga Toxin Gene
@@ -347,22 +386,26 @@ data <-
 #Shiga 
 stx_all <- 
   selected_data %>%
-  select(stx := stx.subtype, stx.subtype := stx.subtype_detail, Source) %>%
+  select(Presence_stx, stx.subtype, Source) %>%
   mutate_all(~if_else(is.na(.), "ND", .)) %>%
   mutate(stx.subtype = str_remove_all(stx.subtype, " "),
-         stx = factor(stx, levels = c("stx1", "stx2", "stx1;stx2", "ND"), ordered = T)) %>%
-  group_by(stx, stx.subtype, Source) %>%
+         Presence_stx = factor(Presence_stx, levels = c("stx1", "stx2", "stx1;stx2", "ND"), 
+                      ordered = T)
+         ) %>%
+  group_by(Presence_stx, stx.subtype, Source) %>%
   tally() %>%
   tidyr::spread(Source, value = n, fill = 0) 
   
 stx_all
+glimpse(stx_all)
+levels(stx_all$Presence_stx)
 ```
 
 
 Export Complete Shiga 
 ```{r}
 write.table(stx_all,
-            here("results", "2025-02-07_stx_all.tsv"),
+            here("results", "2025-02-10_stx_all.tsv"),
             sep = "\t", 
             col.names = T, row.names = F,
             quote = F)
@@ -380,8 +423,8 @@ stx_compact <-
     Human >= 10 | `Non Human` >= 10 ~ stx.subtype,
     TRUE ~ "Other"
   ))%>%
-  group_by(stx, stx.subtype) %>%
-  arrange(stx, stx.subtype)
+  group_by(Presence_stx, stx.subtype) %>%
+  arrange(Presence_stx, stx.subtype)
 
 stx_compact %>% View()
 
@@ -396,13 +439,14 @@ stx_sub_levels <-
     "stx2a;stx2b",
     "Other", "ND", "Total")
 
-
+names(stx_compact)
 stx_compact_total <- 
   stx_compact %>%
   ungroup() %>%
   mutate(stx.subtype = factor(stx.subtype, levels = stx_sub_levels, ordered = T)) %>%
-  group_by(stx, stx.subtype) %>%
+  group_by(Presence_stx, stx.subtype) %>%
   summarise(Human := sum(Human), `Non Human`:= sum(`Non Human`), .groups = "keep") 
+
 
 stx_compact_total %>% View()
 ```
@@ -413,27 +457,28 @@ Adding sums per stx
 sums_stx <- 
   stx_compact_total %>%
   ungroup() %>%
-  group_by(stx) %>%
+  group_by(Presence_stx) %>%
   summarise(Human := sum(Human), `Non Human`:= sum(`Non Human`), .groups = "keep") %>%
-  mutate(stx.subtype = "Total", .after = "stx") %>%
+  mutate(stx.subtype = "Total", .after = "Presence_stx") %>%
   mutate(stx.subtype = factor(stx.subtype, levels = stx_sub_levels, ordered = T)) %>%
   # we remove ND because it will be the same 
-  filter(stx != "ND")
+  filter(Presence_stx != "ND")
+
 
 # Now merging so we can have display 
 stx_compact_total <- 
   stx_compact_total %>%
   bind_rows(sums_stx) %>% 
-  arrange(stx) 
+  arrange(Presence_stx) 
 
 stx_compact_total %>% View()
 
 # Output for an eventual manual formatting
-# write.table(stx_compact_total,
-#             here("results", "2025-02-06_stx_compact_Total.tsv"),
-#             sep = "\t", 
-#             col.names = T, row.names = F,
-#             quote = F)
+write.table(stx_compact_total,
+            here("results", "2025-02-10_stx_compact_Total.tsv"),
+            sep = "\t",
+            col.names = T, row.names = F,
+            quote = F)
 
 
 ```
@@ -448,51 +493,31 @@ stx_gt_table <-
   stx_compact_total %>% 
   ungroup() %>%
   gt(rowname_col = "stx.subtype",
-     groupname_col = "stx", 
+     groupname_col = "Presence_stx", 
      process_md = TRUE, 
      row_group_as_column = TRUE,
      rownames_to_stub = FALSE) %>%
-  #opt_table_lines(extent = "none") %>%
   opt_table_lines(extent = "default") %>%
   tab_header(title = md("**Table 2:** Stx genes and stx subtypes identified in human and non-human sources.")) %>%
   tab_spanner(label =  "Source", 
               columns = c(Human, `Non Human`)) %>%
-  # gt::summary_rows(
-  #   groups = TRUE,
-  #   columns = c(`Human`, `Non Human`),
-  #   fns = list(Sum = ~sum(.))
-  #   ) # does no tappear to work so manual
   tab_style(
     style = list(
       cell_text(weight = "bold")
       ), 
     locations = cells_row_groups( ) ) %>%
-  # tab_style(
-  #   style = list(), 
-  #   locations = cells_body(
-  #   columns = crop
-  #     )) %>% 
   cols_align(
     align = "left") 
   
 
-# gt::basic_theme()
-# https://themockup.blog/posts/2020-09-26-functions-and-themes-for-gt-tables/#gt-themes
-# basic_theme()? 
-# 
-# stubhead.label
-# stub 
-# tab_
-# row_group()
-  
+
+stx_gt_table 
 ```
 
 ## Export
 
 ```{r}
-stx_gt_table
-
-gtsave(stx_gt_table, "stx_gt_table.png", here::here("results"))
+gtsave(stx_gt_table, "2025-01-10_stx_gt_table.png", here::here("results"))
 ```
 
 # Parallel sets (Sankey like) plots (I want adding to 100 %)
@@ -502,7 +527,8 @@ Now I used ggalluvial
 ```{r}
 parallel_data1 <- 
   data %>%
-  select(Source, eae, stx := stx.subtype, SerotypeOH, n) %>%
+  select(-eae) %>%
+  select(Source, stx := Presence_stx, eae := Presence_eae, SerotypeOH, n) %>%
   # reformating for better display
   mutate(Source = str_replace(Source, "Non human", "Non\nHuman")) %>%
   mutate(stx = str_remove_all(stx, " ")) %>%
@@ -558,7 +584,7 @@ global_parallel_plot1 <-
              alluvium = alluvium,
              label = stratum)) +
   geom_alluvium(aes(fill = Source)) +
-  geom_stratum() + 
+  geom_stratum() +
   # Need to be first
   ggrepel::geom_text_repel(
     data = parallel_data_long1 %>%
@@ -571,7 +597,7 @@ global_parallel_plot1 <-
   ggtitle("Percentage of isolates belonging to the classicaly typing systems") + 
   theme_minimal() 
 
-#global_parallel_plot1
+global_parallel_plot1
 ```
 
 
@@ -836,6 +862,7 @@ parallel_data_long3 %>%
 
 ```
 
+
 Test reorganisation 
 
 https://corybrunson.github.io/ggalluvial/reference/stat_flow.html
@@ -846,6 +873,11 @@ Will know for next time
 - This is the best and most logical one I think
 
 ```{r}
+display.brewer.pal(11, "Spectral")
+brewer.pal(11, "Spectral")
+human_fill_pal <- c( "Human" = "#3288BD"  , "Non Human" = "#ABDDA4" ) 
+
+
 global_parallel_plot3 <- 
   parallel_data_long3 %>%
   ggplot(., aes(x = Types, y = `%`,
@@ -863,7 +895,7 @@ global_parallel_plot3 <-
     geom_fit_text(
         stat = "stratum", min.size = 4) +
   geom_flow(aes(fill = Source)) + 
-  #scale_fill_brewer(palette = "Spectral") +
+  scale_fill_manual(values = human_fill_pal) +
   ggtitle("Percentage of isolates belonging to the classicaly typing systems") + 
   theme_minimal() 
 
@@ -871,11 +903,12 @@ global_parallel_plot3
 ```
 
 
+
 ###  Export the final plot 
 
 ```{r}
 scaling <- 3
-ggsave(filename = here::here("results", "global_parallel_plot3.png"),
+ggsave(filename = here::here("results", "2025-02-10_global_parallel_plot3.png"),
        plot = global_parallel_plot3,
        dpi = 100*scaling,
        units = "px",
@@ -889,15 +922,18 @@ ggsave(filename = here::here("results", "global_parallel_plot3.png"),
 ```{r}
 low_cov <- 
   data %>%
-  select(Avg.Scaffold.coverage, stx.subtype, Serotype.O, Serotype.H,  MLST, Number.cgMLST.loci) %>%
+  select(Avg.Scaffold.coverage, Presence_stx, Serotype.O, Serotype.H,  MLST, Number.cgMLST.loci) %>%
   arrange(Avg.Scaffold.coverage) %>%
-  mutate(stx_NT = ifelse(is.na(stx.subtype), "Non Typeable", "Typed"),
+  mutate(stx_NT = ifelse(is.na(Presence_stx), "Non Typeable", "Typed"),
          O_NT = ifelse(Serotype.O == "ONT", "Non Typeable", "Typed"), 
          H_NT = ifelse(Serotype.H == "HNT", "Non Typeable", "Typed"), 
          MLST_NT = ifelse(Serotype.O == "ND", "Non Typeable", "Typed")
-         ) 
-head(low_cov)
+         ) %>%
+  mutate_at(vars(Avg.Scaffold.coverage), as.numeric)
+  # fixed changed of types ok 
 
+head(low_cov)
+glimpse(low_cov)
 
 low_cov_long <-
   low_cov %>%
@@ -910,16 +946,17 @@ low_cov_long <-
 ```
 
 
+
 ```{r}
 plot_cov1 <- low_cov_long %>%
-  ggplot(aes(x = Typeable,  Avg.Scaffold.coverage, fill = `Typing Method`)) +
+  ggplot(aes(x = Typeable,  y = Avg.Scaffold.coverage, fill = `Typing Method`)) +
   geom_boxplot() +
   theme_bw()
 plot_cov1 
 
 plot_cov2 <- 
   low_cov_long %>%
-  ggplot(aes(x = Typeable,  Avg.Scaffold.coverage, fill = `Typing Method`)) +
+  ggplot(aes(x = Typeable,  y = Avg.Scaffold.coverage, fill = `Typing Method`)) +
   geom_boxplot() +
   ylim(c(0,30)) +
   theme_bw()
@@ -1007,7 +1044,7 @@ Country_Origin_plot <-
 Country_Origin_plot
 
 scaling <- 3
-ggsave(filename = here::here("results", "Country_Origin_plot.png"),
+ggsave(filename = here::here("results", "2025-02-10_Country_Origin_plot.png"),
        plot = Country_Origin_plot,
        dpi = 100*scaling,
        units = "px",
@@ -1026,14 +1063,18 @@ ggsave(filename = here::here("results", "Country_Origin_plot.png"),
 human_data <- 
   data %>%
   filter(`Source Group` == "Human") %>%
-  select(Disease := "Disease..only.human.isolates." , Country) 
+  select(Disease, Country) %>%
+  mutate(Disease = if_else(is.na(Disease), "Unknown", Disease))
+  
+glimpse(human_data)
   
 disease_order <- 
   human_data %>%
   count(Disease) %>%
   arrange(desc(n)) %>%
   pull(Disease) 
-  
+
+disease_order
 # just to have same labelling to make comparisons easier ? 
 country_order2 <- 
   human_data %>%
@@ -1041,15 +1082,16 @@ country_order2 <-
   arrange(n) %>%
   pull(Country) 
 
+country_order2
 # Here aim is to try to keep contries in same order
 human_data2 <- 
   human_data %>% 
   mutate(Country = factor(Country, levels = country_order2, ordered = T),
-         Disease = factor(Disease, levels = disease_order, ordered = T)) %>%
+         Disease = factor(Disease, levels = disease_order, ordered = T, exclude = NULL)) %>%
   count(Disease, Country) %>%
   arrange(Disease, Country)
   
-
+head(human_data2)
 # Test 
 disease_country_plot <- 
   ggplot(human_data2, aes(x = Disease, fill = Country, y = n)) + # Use pre-calculated n
@@ -1062,7 +1104,7 @@ disease_country_plot <-
     box.padding = 0.25,
     point.padding = 0.25,
     # direction = "y",
-    force = 0.01,
+    #force = 0.01,
     segment.color = "grey50",  # Color of the segment
     segment.size = 0.5,       # Thickness of the segment
     size = 3
@@ -1071,10 +1113,10 @@ disease_country_plot <-
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust= 0.5)) 
   
- #display.brewer.all()
+disease_country_plot
 
 scaling <- 3
-ggsave(filename = here::here("results", "disease_country_plot.png"),
+ggsave(filename = here::here("results", "2025-02-10_disease_country_plot.png"),
        plot = disease_country_plot,
        dpi = 100*scaling,
        units = "px",
