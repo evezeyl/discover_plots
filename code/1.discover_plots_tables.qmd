@@ -1199,16 +1199,19 @@ subcategory_plot <-
     size = 3
   ) + 
   scale_fill_manual(values = new_col_pal) +
+  coord_flip() +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust= 0.5)) 
-  
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust= 0.5),
+        legend.position="top") 
+subcategory_plot
+
 scaling <- 3
 ggsave(filename = here::here("results", "2025-02-10_subcategory_plot.png"),
        plot = subcategory_plot,
        dpi = 100*scaling,
        units = "px",
        bg = "white",
-       width = 1479*scaling, height = 900*scaling) 
+       width = 1900*scaling, height = 900*scaling) 
 
 ```
 
