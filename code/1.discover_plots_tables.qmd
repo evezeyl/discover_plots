@@ -41,6 +41,7 @@ library(webshot2)
 library(forcats)
 library(patchwork)
 library(RColorBrewer)
+library(pals)
 #library(viridis)
 #library(janitor)
 #library(gtExtras)
@@ -1105,6 +1106,112 @@ ggsave(filename = here::here("results", "2025-02-10_disease_country_plot.png"),
 
 
 ```
+
+
+# Plot : Source non-human and subgroups
+
+```{r}
+# To have the counts it needs to be precalculated 
+non_human_data <- 
+  data %>%
+  filter(Source != "Human") %>%
+  mutate_at(vars(Source.Subgroup, Source.Group), ~ str_replace_all(., "_", " ")) %>%
+  rename(`Source Group` = Source.Group, 
+         `Source Subgroup` = Source.Subgroup)
+  
+glimpse(non_human_data)
+dim(non_human_data)
+
+
+# need to get the order correctly 
+source_group_order <- 
+  non_human_data %>%
+  count(`Source Group`) %>%
+  arrange(desc(n)) 
+source_group_order
+
+source_subgroup_order <- 
+  non_human_data %>%
+  count(`Source Subgroup`) %>%
+  arrange(n) 
+source_subgroup_order
+
+nbcolors <- length(unique(source_subgroup_order$`Source Subgroup`))
+nbcolors
+
+
+non_human_data <- 
+  non_human_data %>%
+  group_by(`Source Group`, `Source Subgroup`) %>%
+  tally() %>%
+  mutate(`Source Group` = factor(`Source Group`, levels = source_group_order$`Source Group`, ordered = T)) %>%
+  mutate(`Source Subgroup` = factor(`Source Subgroup`, levels = source_subgroup_order$`Source Subgroup`, ordered = T)) 
+
+non_human_data
+
+# need a palette color with more discriminant colors (not sufficient otherwise)
+# I can use alphabet it has 26 colors ... hum need to adjust somewhat
+# https://r-charts.com/colors/
+  
+dput(unname(stepped3(26)))
+dput(source_subgroup_order$`Source Subgroup`)
+
+new_col_pal <- 
+  c("Farmed shellfish"= "#3182BD", 
+    "Sewage wastewater"=  "#6BAED6", 
+    "Surface freshwater"= "#9ECAE1", 
+    "Groundwater" = "#C6DBEF", 
+    "Livestock unknown" = "#E6550D", 
+    "Sheep" = "#FD8D3C", 
+    "Cattle" = "#FDAE6B", 
+    "Goats" = "#FDD0A2", 
+    "Pigs" = "#FFB6C1",
+    "Goats sheep petting" = "#8B1C62", 
+    "Dogs" = "#8B5F65",
+    "Horses donkeys"= "#8B4726",
+    "Other mammals"= "#8B5A2B",
+    "Nuts seeds incl oils thereof" = "#008B45", 
+    "Vegetables" = "#74C476", 
+    "Other" = "#FFFF00", 
+    "Pheasants quails pigeons doves" = "#9E9AC8", 
+    "Ducks geese and waterfowl" = "#BCBDDC", 
+    "Other wild ruminants" = "#DADAEB", 
+    "Deer" = "#636363", 
+    "Rabbits hares" = "#969696", 
+    "Wild boars" = "#BDBDBD", 
+    "Moose elk" = "#D9D9D9")
+
+subcategory_plot <- 
+  ggplot(non_human_data, 
+       aes(x = `Source Group`, fill = `Source Subgroup`, y = n)) + # Use pre-calculated n
+  geom_bar(stat = "identity") +  # Important: Use stat = "identity"
+  geom_text_repel(
+    aes(label = n),
+    stat = "identity",      # Important: Use stat = "identity"
+    position = position_stack(vjust = 0.5),
+    min.segment.length = 0,
+    box.padding = 0.25,
+    point.padding = 0.25,
+    # direction = "y",
+    force = 0.01,
+    segment.color = "grey50",  # Color of the segment
+    segment.size = 0.5,       # Thickness of the segment
+    size = 3
+  ) + 
+  scale_fill_manual(values = new_col_pal) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust= 0.5)) 
+  
+scaling <- 3
+ggsave(filename = here::here("results", "2025-02-10_subcategory_plot.png"),
+       plot = subcategory_plot,
+       dpi = 100*scaling,
+       units = "px",
+       bg = "white",
+       width = 1479*scaling, height = 900*scaling) 
+
+```
+
 
 
 # Output data for Camilla 
