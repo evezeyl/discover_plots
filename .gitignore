@@ -7,3 +7,7 @@
 **.tsv
 **.ods
 results
+
+/.quarto/
+code/*_files/
+code/*.html

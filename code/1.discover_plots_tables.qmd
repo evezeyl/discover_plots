@@ -47,7 +47,7 @@ library(pals)
 #library(gtExtras)
 #library(gtsummary)
 # magick
-
+here::i_am("code/1.discover_plots_tables.qmd")
 ```
 
 # Data check and cleaning 
@@ -157,7 +157,7 @@ summary_table <-
   selected_data %>% 
   my_summary_fun()  
 
-View(summary_table)
+#View(summary_table)
 ```
 
 ### Previous data check for info
@@ -165,7 +165,7 @@ View(summary_table)
 
 <!-- 
 ## Data control helpers - previous, now its not actual
-```{r}
+```{r, eval = FALSE}
 selected_data %>%
   select(MLST) %>%
   distinct() %>%
@@ -196,7 +196,7 @@ Unknown disease its because its only for humans, while NA its not applicable
 - so we week Unknown as is
 
 
-```{r replacement function}
+```{r replacement function, eval = FALSE}
 # Function to detect pattern in a cell and replace it by something else (eg. NA)
 replace_with_XX <- function(astring, patterns, XX) {
   
@@ -213,7 +213,7 @@ replace_with_XX <- function(astring, patterns, XX) {
 ```
 
 
-```{r}
+```{r, eval = FALSE}
 # The NA is already NA so we do not need to add (would mess up system)
 NAs <- c("^ONT$", "^HNT$", "^ND$" )
 
@@ -237,9 +237,9 @@ homegeneized_data <-
 ### Data control 
 Control 
 ```{r}
-selected_data %>% 
-  my_summary_fun() %>%
-  View()
+# selected_data %>% 
+#   my_summary_fun() %>%
+#   View()
 ```
 
 ### Export summary statistics
@@ -314,8 +314,7 @@ AMR_data %>%
   summary(., maxsum = 400) %>%
     as.data.frame.matrix(row.names = NULL) %>% 
     mutate_all(~coalesce(., "")) %>%
-    `rownames<-`( NULL )  %>%
-  View()
+    `rownames<-`( NULL )  # %>% View()
 ```
 
 - only 0 So no ND 
@@ -368,7 +367,7 @@ Genes with only 0 - removed
 
 
 <!-- control that sat, pet, pera ok  -> they should not be empty
-```{r}
+```{r , eval = FALSE}
 glimpse(data)
 
 levels(as.factor(data$sat))
@@ -427,7 +426,7 @@ stx_compact <-
   group_by(Presence_stx, stx.subtype) %>%
   arrange(Presence_stx, stx.subtype)
 
-stx_compact %>% View()
+#stx_compact %>% View()
 
 dput(sort(unique(stx_compact$stx.subtype)))
 
@@ -449,7 +448,7 @@ stx_compact_total <-
   summarise(Human := sum(Human), `Non Human`:= sum(`Non Human`), .groups = "keep") 
 
 
-stx_compact_total %>% View()
+# stx_compact_total %>% View()
 ```
 
 ## Tables with sums 
@@ -472,7 +471,7 @@ stx_compact_total <-
   bind_rows(sums_stx) %>% 
   arrange(Presence_stx) 
 
-stx_compact_total %>% View()
+# stx_compact_total %>% View()
 
 # Output for an eventual manual formatting
 write.table(stx_compact_total,
@@ -551,8 +550,7 @@ parallel_data1 %>%
     summary(., maxsum = 400) %>%
     as.data.frame.matrix(row.names = NULL) %>%
     mutate_all(~coalesce(., "")) %>%
-    `rownames<-`( NULL ) %>%
-  View()
+    `rownames<-`( NULL ) # %>%  View()
 
 ```
 
@@ -603,11 +601,11 @@ global_parallel_plot1
 
 
 ```{r}
-# ggsave(filename = here::here("results", "global_parallel_plot1.png"),
-#        plot = global_parallel_plot1,
-#        dpi = 300,
-#        units = "cm",
-#        width = 30, height = 10) 
+ggsave(filename = here::here("results", "global_parallel_plot1.png"),
+       plot = global_parallel_plot1,
+       dpi = 300,
+       units = "cm",
+       width = 30, height = 10)
 ```
 
 
@@ -615,7 +613,7 @@ global_parallel_plot1
 ## Preparing for final plotting - order and grouping some variables 
 
 ```{r}
-dput(unique(unique(parallel_data1$stx))
+dput(unique(unique(parallel_data1$stx)))
 #c("stx1", "stx1\nstx2", "stx2", NA)
 dput(unique(unique(parallel_data1$eae)))
 #c("Abscent", "Present")
@@ -963,6 +961,7 @@ ggsave(filename = here::here("results", "avge_cov_plot.png"),
 
 # Plot : Country + source group + number of isolates 
 
+# ! FIXME HERE 
 
 ```{r}
 # That is for better aesthetics
@@ -1039,6 +1038,7 @@ ggsave(filename = here::here("results", "2025-02-10_Country_Origin_plot.png"),
 # Plot Human data + disease plot (barplot with disease) 
 - `fill per country? 
 
+# ! FIXME HERE
 
 ```{r}
 human_data <- 
@@ -1109,12 +1109,13 @@ ggsave(filename = here::here("results", "2025-02-10_disease_country_plot.png"),
 
 
 # Plot : Source non-human and subgroups
-
+# ! FIXEME
 ```{r}
 # To have the counts it needs to be precalculated 
 non_human_data <- 
   data %>%
   filter(Source != "Human") %>%
+  select(- "Source Group") %>% # because has been added 
   mutate_at(vars(Source.Subgroup, Source.Group), ~ str_replace_all(., "_", " ")) %>%
   rename(`Source Group` = Source.Group, 
          `Source Subgroup` = Source.Subgroup)

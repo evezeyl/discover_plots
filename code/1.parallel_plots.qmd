@@ -19,7 +19,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-- added Renv
+-   added Renv
 
 ```{r setup}
 #| include: false
@@ -33,9 +33,10 @@ library(ggfittext)
 library(tidyr)
 library(purrr)
 library(svglite)
+here::i_am("code/1.parallel_plots.qmd")
 ```
 
-# Data check and cleaning 
+# Data check and cleaning
 
 NOTE: The data is not clean - This is not normal (you should provide the data set with a table that can be used directly in an analysis software - so the formating should be rechecked)
 
@@ -47,7 +48,8 @@ glimpse(data)
 
 data selection - to ease making graphs (and only cleaning what I must)
 
-- based on lab data 
+-   based on lab data
+
 ```{r}
 # lab then sequence fields - that is why organized like that
 # last those I do not think I will use but keep anyway for now
@@ -62,7 +64,7 @@ selected_data <-
 glimpse(selected_data)
 ```
 
-data quality -> in case need modifications fields
+data quality -\> in case need modifications fields
 
 ```{r}
 # function for fast reuse of summary
@@ -77,25 +79,22 @@ my_summary_fun <- function(data) {
 }
 ```
 
-Verification 
+Verification
 
 ```{r}
-selected_data %>% 
-  my_summary_fun()  %>%
-  View()
-
-selected_data %>%
-  select(MLST) %>%
-  distinct() %>%
-  View()
+# selected_data %>%
+#   my_summary_fun()  %>%
+#   View()
+# selected_data %>%
+#   select(MLST) %>%
+#   distinct() %>%
+#   View()
 ```
 
 
+THIS IS TO BE CHECKED : **Homoegeneizing NAs** *Ask for treatment*
 
-THIS IS TO BE CHECKED : **Homoegeneizing NAs** 
-_Ask for treatment_
-
-
+```{=html}
 <!-- 
 Most should be solved because need to take WGS
 * have to be filtered  - considered as right (even though made by 2 different methods)
@@ -106,7 +105,8 @@ Most should be solved because need to take WGS
 - [ ] Serotype H: H? -> unknwon
 
 Need to homogeneize what is uncertain 
---> 
+-->
+```
 
 ```{r}
 # The NA is already NA so we do not need to add (would mess up system)
@@ -147,22 +147,21 @@ homegeneized_data <-
   
 ```
 
+Control
 
-Control 
 ```{r}
-homegeneized_data  %>% 
-  my_summary_fun()  %>%
-  View()
-
-homegeneized_data  %>% 
-  select(MLST) %>%
-  distinct() %>%
-  View()
+# homegeneized_data  %>% 
+#   my_summary_fun()  %>%
+#   View()
+# 
+# homegeneized_data  %>% 
+#   select(MLST) %>%
+#   distinct() %>%
+#   View()
 ```
 
+
 !new ST are also now considered as a category New (no distinctions) (fix that if you do not want it)
-
-
 
 # Manipulation data for making graphs
 
@@ -193,9 +192,8 @@ long_data <-
                 value = "stratum",
                 id = "alluvium") 
 head(long_data)
-View(long_data)
+#View(long_data)
 ```
-
 
 ```{r}
 # to be able to resize the text we need to go to long format
@@ -219,9 +217,8 @@ global_parallel_plot <-
   theme_minimal() 
 ```
 
-Export the plot 
-Curious seems that gemo_fit_text does not work nice with export in gg...
-Export manually and works best
+Export the plot Curious seems that gemo_fit_text does not work nice with export in gg... Export manually and works best
+
 ```{r}
 # ggsave(filename = here::here("results", "global_parallel_plot.svg"),
 #        plot = global_parallel_plot,
@@ -234,4 +231,3 @@ ggsave(filename = here::here("results", "global_parallel_plot2.png"),
        units = "cm",
        width = 30, height = 10) 
 ```
-
