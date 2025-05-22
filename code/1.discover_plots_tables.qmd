@@ -60,26 +60,10 @@ data1 <- readxl::read_xlsx(here::here(params$data),
                            na = "NA",
                            col_types = "text"
                            ) 
-# is not read proprely if other column type ! 
-glimpse(data1) 
+# is not read correcly if other column type ! 
+# glimpse(data1) 
 dim(data1) # 3418 This is ok
 ```
-
-<!-- Croschecking data reading - seems some data not read proprely 
-OK now that it is read as text 
-
-```{r}
-data1 %>%
-  filter(Isolate.ID == "STEC-SSI-470"   | Isolate.ID == "654006") %>%
-  select(sat, pet, pera)
-
-
-names(data1)
-levels(as.factor(data1$pet))
-levels(as.factor(data1$sat))
-levels(as.factor(data1$pera))
-```
--->
 
 # Data pretifying & for homogeneity for all datasets
 
@@ -99,13 +83,10 @@ data <-
     str_detect(stx.subtype, "stx1") & !str_detect(stx.subtype, "stx2") ~ "stx1",
     str_detect(stx.subtype, "stx2") & !str_detect(stx.subtype, "stx1") ~ "stx2",
     TRUE ~ NA)) %>% 
-  
   # pathogenecity island re-encoding
   mutate(Presence_eae = if_else(eae =="0", "Abscent", "Present"),
         Disease = if_else(Disease == "Unknown",  NA_character_, Disease) 
         )
-# add here if other things detected and rerun
-  
 ```
 
 # Data selection - to ease making graphs (and only cleaning what I must)
@@ -128,7 +109,6 @@ selected_data <-
          n
 ) 
 glimpse(selected_data)
-#View(selected_data)
 ```
 
 
@@ -160,84 +140,10 @@ summary_table <-
 #View(summary_table)
 ```
 
-### Previous data check for info
-> not needed anymore 
-
-<!-- 
-## Data control helpers - previous, now its not actual
-```{r, eval = FALSE}
-selected_data %>%
-  select(MLST) %>%
-  distinct() %>%
-  View()
-```
-
-
-THIS IS TO BE CHECKED : **Homoegeneizing NAs** 
-_Ask for treatment_
-
-
-- [x] Serotype O -> ONT = O Non typeable. O112ab, bc osv treated at different serotypes
-- [x] Serotype H -> HNT = H Non typeable 
-
-OK, I think we can let as is 
-But for the column O:H serotype -> We leave as ONT:HNT possibilities (because we want it clear)
-
-Need to homogeneize what is uncertain.
-Could have done in beginning but prefer control
-
-Camilla has fixed the MLST
-
-- [x] eae  -> presence / abscence re-encoded
-
-- [x] Data homogeneization 
-
-Unknown disease its because its only for humans, while NA its not applicable
-- so we week Unknown as is
-
-
-```{r replacement function, eval = FALSE}
-# Function to detect pattern in a cell and replace it by something else (eg. NA)
-replace_with_XX <- function(astring, patterns, XX) {
-  
-  ## XX is what should the thing replaced with 
-  
-  # Test if there is a match with the cell to any replacement pattern
-  replace_decision <- 
-    any(unlist(
-      lapply(patterns, function(x) grepl(x, astring))
-      ))
-  # True then replace with NA 
-  ifelse(replace_decision, XX, astring)
-}
-```
-
-
-```{r, eval = FALSE}
-# The NA is already NA so we do not need to add (would mess up system)
-NAs <- c("^ONT$", "^HNT$", "^ND$" )
-
-
-# I finished to use Unknown as its more practical for the graph
-homegeneized_data <- 
-  selected_data %>%
-  mutate(across(everything(), 
-                ~ purrr::map_vec(., replace_with_XX, NAs, "Unknown")
-         )) %>%
-  # Now I need to replace NA also 
-  mutate(across(everything(), 
-                ~ purrr::map_vec(., function(x) ifelse(is.na(x), "Unknown",x))
-         ))
-  
-  
-```
-
---> 
-
 ### Data control 
 Control 
 ```{r}
-# selected_data %>% 
+# selected_data %>%
 #   my_summary_fun() %>%
 #   View()
 ```
@@ -278,7 +184,7 @@ setdiff(list_gene_data, list_gene_fine)
 
 102 genes consistent between reports AMR and list in script for the pipeline. 
 
-But Camilla mentione 145 - incl. virulotyper -> found db - check which genes are searched additionally
+But Camilla mentioned 145 - incl. virulotyper -> found db - check which genes are searched additionally
 
 ```{r}
 virulotyper_genes<- readr::read_tsv(here::here("results", "sequences_list_virulotyper"), col_names = "gene" )
@@ -309,45 +215,56 @@ checking reporting of AMR data : if 0 or contains also ND
 AMR_data <- 
   data[,26:127] %>%
   mutate_all(factor)
+```
 
-AMR_data %>%
-  summary(., maxsum = 400) %>%
-    as.data.frame.matrix(row.names = NULL) %>% 
-    mutate_all(~coalesce(., "")) %>%
-    `rownames<-`( NULL )  # %>% View()
+Control
+```{r}
+# AMR_data %>%
+#   summary(., maxsum = 400) %>%
+#     as.data.frame.matrix(row.names = NULL) %>% 
+#     mutate_all(~coalesce(., "")) %>%
+#     `rownames<-`( NULL )  %>%
+#   View()
 ```
 
 - only 0 So no ND 
 
 ### Genes with only 0
 
-checking columns wich have only 0 -> so we can remove those from the data
+checking columns which have only 0 -> so we can remove those from the data
 we need to have the levels
 ```{r}
 nb_rows <- as.character(nrow(AMR_data))
 nb_rows
 sum_AMR_data <- 
   AMR_data %>%
-  mutate_all(as.character) %>%
+  dplyr::mutate_all(as.character) %>%
   # Ensuring that we can differentiate from NA
-  mutate_all(~str_replace(.x, "0", "1")) %>%
-  mutate_all(as.numeric) %>%
-  summarise_all(~sum(.x, na.rm = T)) %>%
+  # So we replace the columns where has not been detected: 0 by 1
+  # So we can count the genes for which no AMR has been detected
+  # and then filter those
+  dplyr::mutate_all(~str_replace(.x, "0", "1")) %>%
+  dplyr::mutate_all(as.numeric) %>%
+  dplyr::summarise_all(~sum(.x, na.rm = T)) %>%
   t() %>%
   tibble::as_tibble(rownames = "gene") %>%
-  mutate_all(as.character)
+  dplyr::mutate_all(as.character) %>%
+  dplyr::rename(count_nogene = V1)
 
-# now we have those to remove
+head(sum_AMR_data)
+nb_rows
+
+# now we select those where no AMR gene have been detected
+# so we can make a list of those genes with no detection
 remove_AMR <- 
   sum_AMR_data %>%
-  filter(V1 == nb_rows) %>%
-  pull(gene)
+  dplyr::filter(count_nogene == nb_rows) %>%
+  dplyr::pull(gene)
   
 dput(remove_AMR)
-#data$ipad
 length(remove_AMR)
 ```
-28 genes ... to be removed (cf Output data for Camilla)
+28 genes ... to be removed from the list because not detected (cf Output data for Camilla)
 dput(remove_AMR)
 c("ipad", "saa", "aggd", "cfac", "agg4c", "tccp", "ipah9", "lnga", 
 "virf", "agg5a", "agga", "agg4d", "agg4a", "cci", "aafd", "aggc", 
@@ -359,25 +276,12 @@ c("ipad", "saa", "aggd", "cfac", "agg4c", "tccp", "ipah9", "lnga",
 dim(data)
 data <- 
   data %>%
-  # remove genes with 0 
+  # remove genes where no AMR have been detected (keep those where detected) 
   select(!remove_AMR) 
-  
-```
-Genes with only 0 - removed 
-
-
-<!-- control that sat, pet, pera ok  -> they should not be empty
-```{r , eval = FALSE}
-glimpse(data)
-
-levels(as.factor(data$sat))
-levels(as.factor(data$pet))
-levels(as.factor(data$pera))
 ```
 
-OK, now its still ok 
---> 
 
+AMR genes that have not been detected are now removed from the data
 
 # Table FOR Shiga Toxin Gene
 
@@ -396,8 +300,8 @@ stx_all <-
   tally() %>%
   tidyr::spread(Source, value = n, fill = 0) 
   
-stx_all
-glimpse(stx_all)
+#stx_all
+#glimpse(stx_all)
 levels(stx_all$Presence_stx)
 ```
 
@@ -447,7 +351,6 @@ stx_compact_total <-
   group_by(Presence_stx, stx.subtype) %>%
   summarise(Human := sum(Human), `Non Human`:= sum(`Non Human`), .groups = "keep") 
 
-
 # stx_compact_total %>% View()
 ```
 
@@ -471,7 +374,7 @@ stx_compact_total <-
   bind_rows(sums_stx) %>% 
   arrange(Presence_stx) 
 
-# stx_compact_total %>% View()
+#stx_compact_total %>% View()
 
 # Output for an eventual manual formatting
 write.table(stx_compact_total,
@@ -550,7 +453,8 @@ parallel_data1 %>%
     summary(., maxsum = 400) %>%
     as.data.frame.matrix(row.names = NULL) %>%
     mutate_all(~coalesce(., "")) %>%
-    `rownames<-`( NULL ) # %>%  View()
+    `rownames<-`( NULL ) %>%
+  View()
 
 ```
 
@@ -677,7 +581,7 @@ str(parallel_data2)
 
 
 ### Counts 
-I do not want the counts before because I want to be sure the factor order are respeced 
+I do not want the counts before because I want to be sure the factor order are respcted 
 and that is done above in parallel2_data 
 so its better to modify here 
 
@@ -689,7 +593,8 @@ count_origin <-
   parallel_data2 %>%
   group_by(Origin) %>%
   summarise(sum_Origin = sum(n)) 
-  
+
+
 source_levels <- paste(count_origin$Origin, count_origin$sum_Origin,  sep = "\n")
 source_levels
 
@@ -843,8 +748,7 @@ parallel_data_long3 %>%
 ```
 
 
-Test reorganisation 
-
+Test reorganization 
 https://corybrunson.github.io/ggalluvial/reference/stat_flow.html
 
 NB : using those options earlier might have avoided all the definition of factors (eg. most abundant on top) but that was already done
@@ -856,7 +760,10 @@ Will know for next time
 #display.brewer.pal(11, "Spectral")
 #brewer.pal(11, "Spectral")
 human_fill_pal <- c( "Human" = "#3288BD"  , "Non Human" = "#ABDDA4" ) 
+# to be able to resize the text we need to go to long format
 
+#threshold <- 20
+text_size <- 20
 
 global_parallel_plot3 <- 
  parallel_data_long3 %>%
@@ -866,18 +773,25 @@ global_parallel_plot3 <-
              label = stratum)
          ) +
   geom_stratum(alpha = .5) +
+  # need to be second
+   geom_fit_text(
+       stat = "stratum", min.size = text_size -12) +
+  geom_flow(aes(fill = Source), aes.bind = TRUE) + 
+  scale_fill_manual(values = human_fill_pal) +
   ggrepel::geom_text_repel(
     data = parallel_data_long3 %>%
       filter(Types == "stx" & (stratum == "NA\n(22)")), 
     aes(label = "NA (22)"),
-    stat = "stratum", size = 3, direction = "y", nudge_x = -.5) +
-  # need to be second
-   geom_fit_text(
-       stat = "stratum", min.size = 1) +
-  geom_flow(aes(fill = Source), aes.bind = TRUE) + 
-  scale_fill_manual(values = human_fill_pal) +
+    stat = "stratum", size = text_size -15, direction = "y", nudge_x = -.5) +
   ggtitle("Percentage of isolates belonging to the classicaly typing systems") + 
-  theme_minimal() 
+  theme_minimal() +
+  theme(axis.text = element_text(size = text_size),
+        axis.title = element_text(size = text_size),
+        axis.line = element_line(linewidth = .4),
+        legend.text = element_text(size = text_size -4),  
+        legend.title = element_text(size = text_size -4),
+        plot.title = element_text(size = text_size)
+        )
 
 global_parallel_plot3
 ```
@@ -887,7 +801,7 @@ global_parallel_plot3
 
 ```{r}
 scaling <- 3
-ggsave(filename = here::here("results", "2025-02-10_global_parallel_plot3.png"),
+ggsave(filename = here::here("results", "2025-05-22_global_parallel_plot3.png"),
        plot = global_parallel_plot3,
        dpi = 100*scaling,
        units = "px",
@@ -947,8 +861,8 @@ avge_cov_plot <-
   plot_cov1 + plot_cov2 +
   plot_annotation(
     title = "Average Scaffold coverage and Typing success") + 
-  plot_layout(guides = "collect")
-
+  plot_layout(guides = "collect") +
+  theme_minimal() 
 
 ggsave(filename = here::here("results", "avge_cov_plot.png"),
        plot = avge_cov_plot,
@@ -1041,7 +955,7 @@ Country_Origin_plot <-
 Country_Origin_plot
 
 scaling <- 3
-ggsave(filename = here::here("results", "2025-05-12b_Country_Origin_plot.png"),
+ggsave(filename = here::here("results", "2025-05-22_Country_Origin_plot.png"),
        plot = Country_Origin_plot,
        dpi = 100*scaling,
        units = "px",
@@ -1129,7 +1043,7 @@ disease_country_plot <-
 disease_country_plot
 
 scaling <- 3
-ggsave(filename = here::here("results", "2025-05-12_disease_country_plot.png"),
+ggsave(filename = here::here("results", "2025-05-25_disease_country_plot.png"),
        plot = disease_country_plot,
        dpi = 100*scaling,
        units = "px",
@@ -1233,8 +1147,8 @@ subcategory_plot <-
     # direction = "y",
     force = 0.01,
     segment.color = "black",  # Color of the segment
-    segment.size = 0.5,       # Thickness of the segment
-    size = 6
+    segment.size = 3,       # Thickness of the segment
+    size = 10
   ) + 
   scale_fill_manual(values = new_col_pal) +
   coord_flip() +
@@ -1251,7 +1165,7 @@ subcategory_plot <-
 subcategory_plot
 
 scaling <- 3
-ggsave(filename = here::here("results", "2025-05-12_subcategory_plot.png"),
+ggsave(filename = here::here("results", "2025-05-25_subcategory_plot.png"),
        plot = subcategory_plot,
        dpi = 100*scaling,
        units = "px",

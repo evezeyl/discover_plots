@@ -36,6 +36,7 @@ library(svglite)
 here::i_am("code/1.parallel_plots.qmd")
 ```
 
+> This script is not used anymore - did all the plots in 1.discover_plots_tables.qmd
 # Data check and cleaning
 
 NOTE: The data is not clean - This is not normal (you should provide the data set with a table that can be used directly in an analysis software - so the formating should be rechecked)
@@ -194,6 +195,9 @@ long_data <-
 head(long_data)
 #View(long_data)
 ```
+
+# Do not use anymore 
+> See 1.discover_plots_tables.qmd
 
 ```{r}
 # to be able to resize the text we need to go to long format
