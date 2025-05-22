@@ -1043,7 +1043,7 @@ disease_country_plot <-
 disease_country_plot
 
 scaling <- 3
-ggsave(filename = here::here("results", "2025-05-25_disease_country_plot.png"),
+ggsave(filename = here::here("results", "2025-05-22_disease_country_plot.png"),
        plot = disease_country_plot,
        dpi = 100*scaling,
        units = "px",
@@ -1165,7 +1165,7 @@ subcategory_plot <-
 subcategory_plot
 
 scaling <- 3
-ggsave(filename = here::here("results", "2025-05-25_subcategory_plot.png"),
+ggsave(filename = here::here("results", "2025-05-22_subcategory_plot.png"),
        plot = subcategory_plot,
        dpi = 100*scaling,
        units = "px",
