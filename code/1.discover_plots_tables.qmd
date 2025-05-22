@@ -959,9 +959,9 @@ ggsave(filename = here::here("results", "avge_cov_plot.png"),
 
 ```
 
-# Plot : Country + source group + number of isolates 
+# Fixed Plot : Country + source group + number of isolates 
 
-# ! FIXME HERE 
+<!-- Changed the labels scale -->
 
 ```{r}
 # That is for better aesthetics
@@ -999,11 +999,19 @@ Country_count  <-
 glimpse(Country_count)
 groups_order
 
+# setting a count threshold
+threshold <- 10  
+text_size <- 30
+
+Country_count %>%
+  dplyr::rename(Count = n)
+
 Country_Origin_plot <- 
-  ggplot(Country_count, aes(x = Country, fill = `Source Group`, y = n)) + # Use pre-calculated n
+  ggplot(Country_count %>%  dplyr::rename(Count = n),
+         aes(x = Country, fill = `Source Group`, y = Count)) + 
   geom_bar(stat = "identity") +  # Important: Use stat = "identity"
   geom_text_repel(
-    aes(label = n),
+    aes(label =  ifelse(Count > threshold, as.character(Count), "")),
     stat = "identity",      # Important: Use stat = "identity"
     position = position_stack(vjust = 0.5),
     min.segment.length = 0,
@@ -1011,20 +1019,29 @@ Country_Origin_plot <-
     point.padding = 0.25,
     # direction = "y",
     force = 0.01,
-    segment.color = "grey50",  # Color of the segment
-    segment.size = 0.5,       # Thickness of the segment
-    size = 3
+    #segment.color = "grey50",  # Color of the segment
+    segment.size = 1.5,       # Thickness of the segment
+    size = 6
   ) + 
   #scale_fill_viridis_d(option = "E") +
   scale_fill_brewer(palette = "Spectral") +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust= 0.5)) 
+  theme(axis.text.x = 
+          element_text(angle = 45, vjust = 0.5, hjust= 0.5, size = text_size),
+        axis.text.y = 
+          element_text(size = text_size),
+        axis.title = element_text(size = text_size),
+        axis.line = element_line(linewidth = .4),
+        legend.text = element_text(size = text_size -8),  
+        legend.title = element_text(size = text_size -7)
+        )
+   
   
  #display.brewer.all()
 Country_Origin_plot
 
 scaling <- 3
-ggsave(filename = here::here("results", "2025-02-10_Country_Origin_plot.png"),
+ggsave(filename = here::here("results", "2025-05-12b_Country_Origin_plot.png"),
        plot = Country_Origin_plot,
        dpi = 100*scaling,
        units = "px",
@@ -1035,10 +1052,10 @@ ggsave(filename = here::here("results", "2025-02-10_Country_Origin_plot.png"),
 
 
 
-# Plot Human data + disease plot (barplot with disease) 
+# Fixed Plot Human data + disease plot (barplot with disease) 
 - `fill per country? 
 
-# ! FIXME HERE
+<!-- Fixed size --> 
 
 ```{r}
 human_data <- 
@@ -1073,31 +1090,46 @@ human_data2 <-
   arrange(Disease, Country)
   
 head(human_data2)
-# Test 
+
+# setting a count threshold
+threshold <- 10  
+text_size <- 30
+
+
 disease_country_plot <- 
-  ggplot(human_data2, aes(x = Disease, fill = Country, y = n)) + # Use pre-calculated n
+  ggplot(human_data2 %>%
+           rename(Count = n), 
+         aes(x = Disease, fill = Country, y = Count)) + # Use pre-calculated n
   geom_bar(stat = "identity") +  # Important: Use stat = "identity"
   geom_text_repel(
-    aes(label = n),
+    aes(label =  ifelse(Count > threshold, as.character(Count), "")),
     stat = "identity",      # Important: Use stat = "identity"
-    position = position_stack(vjust = 0.5),
+    position = position_stack(vjust = .7), 
     min.segment.length = 0,
     box.padding = 0.25,
     point.padding = 0.25,
     # direction = "y",
-    #force = 0.01,
-    segment.color = "grey50",  # Color of the segment
-    segment.size = 0.5,       # Thickness of the segment
-    size = 3
+    force = 0.01,
+    segment.color = "black",  # Color of the segment
+    segment.size = 1.5,       # Thickness of the segment
+    size = 6
   ) + 
   scale_fill_brewer(palette = "Spectral") +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust= 0.5)) 
+  theme(axis.text.x = 
+          element_text(angle = 45, vjust = 0.5, hjust= 0.5, size = text_size),
+        axis.text.y = 
+          element_text(size = text_size),
+        axis.title = element_text(size = text_size),
+        axis.line = element_line(linewidth = .4),
+        legend.text = element_text(size = text_size -8),  
+        legend.title = element_text(size = text_size -7)
+        )
   
 disease_country_plot
 
 scaling <- 3
-ggsave(filename = here::here("results", "2025-02-10_disease_country_plot.png"),
+ggsave(filename = here::here("results", "2025-05-12_disease_country_plot.png"),
        plot = disease_country_plot,
        dpi = 100*scaling,
        units = "px",
@@ -1108,8 +1140,8 @@ ggsave(filename = here::here("results", "2025-02-10_disease_country_plot.png"),
 ```
 
 
-# Plot : Source non-human and subgroups
-# ! FIXEME
+# Fixed Plot : Source non-human and subgroups
+
 ```{r}
 # To have the counts it needs to be precalculated 
 non_human_data <- 
@@ -1182,32 +1214,44 @@ new_col_pal <-
     "Wild boars" = "#BDBDBD", 
     "Moose elk" = "#D9D9D9")
 
+# setting a count threshold
+threshold <- 10  
+text_size <- 30
+
 subcategory_plot <- 
-  ggplot(non_human_data, 
-       aes(x = `Source Group`, fill = `Source Subgroup`, y = n)) + # Use pre-calculated n
+  ggplot(non_human_data %>%
+           dplyr::rename(Count = n), 
+       aes(x = `Source Group`, fill = `Source Subgroup`, y = Count)) + # Use pre-calculated n
   geom_bar(stat = "identity") +  # Important: Use stat = "identity"
   geom_text_repel(
-    aes(label = n),
+    aes(label = ifelse(Count > threshold, as.character(Count), "")),
     stat = "identity",      # Important: Use stat = "identity"
-    position = position_stack(vjust = 0.5),
+    position = position_stack(vjust = .9),
     min.segment.length = 0,
     box.padding = 0.25,
     point.padding = 0.25,
     # direction = "y",
     force = 0.01,
-    segment.color = "grey50",  # Color of the segment
+    segment.color = "black",  # Color of the segment
     segment.size = 0.5,       # Thickness of the segment
-    size = 3
+    size = 6
   ) + 
   scale_fill_manual(values = new_col_pal) +
   coord_flip() +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust= 0.5),
+  theme(axis.text.x = 
+          element_text(angle = 45, vjust = 0.5, hjust= 0.5, size = text_size),
+        axis.text.y = 
+          element_text(size = text_size),
+        axis.title = element_text(size = text_size),
+        axis.line = element_line(linewidth = .4),
+        legend.text = element_text(size = text_size -10),  
+        legend.title = element_text(size = text_size -8),
         legend.position="top") 
 subcategory_plot
 
 scaling <- 3
-ggsave(filename = here::here("results", "2025-02-10_subcategory_plot.png"),
+ggsave(filename = here::here("results", "2025-05-12_subcategory_plot.png"),
        plot = subcategory_plot,
        dpi = 100*scaling,
        units = "px",

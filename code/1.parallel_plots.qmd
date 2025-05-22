@@ -197,6 +197,9 @@ head(long_data)
 
 ```{r}
 # to be able to resize the text we need to go to long format
+threshold <- 20  
+text_size <- 30
+
 global_parallel_plot <- 
   long_data %>%
   mutate(text_size = case_when(
@@ -212,9 +215,23 @@ global_parallel_plot <-
   geom_alluvium(aes(fill = Source)) +
   #geom_stratum(width = 1/2) +
   geom_stratum() + 
-  geom_fit_text(stat = "stratum", min.size = 1) +
+  geom_fit_text(stat = "stratum", 
+                aes(label = stratum),
+           min.size = 1
+           ) +
+  scale_alpha_identity() +
   ggtitle("Percentage of isolates belonging to the classicaly typing systems") + 
-  theme_minimal() 
+  theme_minimal() +
+  theme(axis.text.x = 
+          element_text(angle = 45, vjust = 0.5, hjust= 0.5, size = text_size),
+        axis.text.y = 
+          element_text(size = text_size),
+        axis.title = element_text(size = text_size),
+        axis.line = element_line(linewidth = .4),
+        legend.text = element_text(size = text_size -8),  
+        legend.title = element_text(size = text_size -7)
+        )
+
 ```
 
 Export the plot Curious seems that gemo_fit_text does not work nice with export in gg... Export manually and works best
@@ -225,7 +242,7 @@ Export the plot Curious seems that gemo_fit_text does not work nice with export 
 #        dpi = 300,
 #        units = "cm",
 #        width = 30, height = 10)
-ggsave(filename = here::here("results", "global_parallel_plot2.png"),
+ggsave(filename = here::here("results", "2025-05-12_global_parallel_plot2.png"),
        plot = global_parallel_plot,
        dpi = 300,
        units = "cm",
