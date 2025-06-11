@@ -1170,7 +1170,7 @@ ggsave(filename = here::here("results", "2025-05-22_subcategory_plot.png"),
        dpi = 100*scaling,
        units = "px",
        bg = "white",
-       width = 1900*scaling, height = 900*scaling) 
+       width = 2560*scaling, height = 1298*scaling) 
 
 ```
 
